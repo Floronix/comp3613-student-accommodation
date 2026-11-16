@@ -1,3 +1,18 @@
+# COMP 3613 - Student Accommodation Project
+
+## Project Overview
+*   **Scenario:** Student Accommodation
+  
+## Team Roster
+| Name | GitHub Username |
+| :--- | :--- |
+| Gopal Mahadeo | [@Floronix](https://github.com/Floronix) |
+| Daniel Goodridge | [@DanielG200](https://github.com/DanielG200) |
+| Isaiah Bideshi | [@IsaiahBideshi](https://github.com/IsaiahBideshi) |
+| Shari Wylie | [@ShariWylie](https://github.com/ShariWylie) |
+
+---
+
 # COMP 3613 Student Accommodation (Phase 2 starter)
 
 Flawed baseline **0.2.0** built on [uwidcit/faststart](https://github.com/uwidcit/faststart) (`96ccfce`).
