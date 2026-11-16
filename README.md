@@ -2,14 +2,14 @@
 
 ## Project Overview
 *   **Scenario:** Student Accommodation
-*   
+  
 ## Team Roster
 | Name | GitHub Username |
 | :--- | :--- |
-| Gopal Mahadeo | @Floronix |
-| Daniel Goodridge | @DanielG200 |
-| Isaiah Bideshi | @IsaiahBideshi |
-| Shari Wylie | @ShariWylie |
+| Gopal Mahadeo | [@Floronix](https://github.com/Floronix) |
+| Daniel Goodridge | [@DanielG200](https://github.com/DanielG200) |
+| Isaiah Bideshi | [@IsaiahBideshi](https://github.com/IsaiahBideshi) |
+| Shari Wylie | [@ShariWylie](https://github.com/ShariWylie) |
 
 ---
 
