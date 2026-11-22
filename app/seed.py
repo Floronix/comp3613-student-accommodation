@@ -114,6 +114,43 @@ def seed(*, reset: bool = False) -> None:
         )
         session.commit()
 
+def seed_all_states() -> None:
+    """Extra listings, one per lifecycle state, for tests and demos.
+
+    Not called by seed(), so the default seed data and ids are unchanged.
+    """
+    with Session(engine) as session:
+        l1 = session.exec(select(User).where(User.email == "landlord@example.com")).one()
+        l2 = session.exec(select(User).where(User.email == "landlord2@example.com")).one()
+
+        def make(landlord, title, status, pending=0, verified=0, active=0, rejected=0):
+            return Listing(
+                landlord_id=landlord.id,
+                title=title,
+                area="st_augustine",
+                price=3000,
+                amenities="wifi",
+                contact_phone="555-0200",
+                contact_email=landlord.email,
+                photos="",
+                status=status,
+                flag_pending=pending,
+                flag_verified=verified,
+                flag_active=active,
+                flag_rejected=rejected,
+                created_at="2099-01-03T10:00:00+00:00",
+            )
+
+        session.add_all(
+            [
+                make(l1, "Provisional Unit", "provisional"),
+                make(l1, "Verified Unit", "verified", verified=1),
+                make(l1, "Inactive Unit", "inactive", verified=1),
+                make(l1, "Rejected Unit", "rejected", rejected=1),
+                make(l2, "Other Landlord Pending", "pending", pending=1),
+            ]
+        )
+        session.commit()
 
 if __name__ == "__main__":
     seed(reset=True)
