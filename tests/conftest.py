@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from app.main import app as fastapi_app
 from app.seed import seed, seed_all_states
 import app.models
+import os
 
+os.environ["DATABASE_URI"] = "sqlite:///test.db"
 
 @pytest.fixture
 def test_session():
