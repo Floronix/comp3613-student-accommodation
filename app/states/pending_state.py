@@ -1,5 +1,5 @@
 from app.states.listing_state import ListingState
-from app.exceptions import InvalidTransition
+from app.exceptions import InvalidRequest, InvalidTransition
 
 
 class PendingState(ListingState):
@@ -10,7 +10,7 @@ class PendingState(ListingState):
             self.require_role(actor_role, {"admin"})
 
             if not feedback or not feedback.strip():
-                raise InvalidTransition(
+                raise InvalidRequest(
                     "Feedback is required for provisional approval"
                 )
 
@@ -28,7 +28,7 @@ class PendingState(ListingState):
             self.require_role(actor_role, {"admin"})
 
             if not feedback or not feedback.strip():
-                raise InvalidTransition(
+                raise InvalidRequest(
                     "A rejection reason is required"
                 )
 

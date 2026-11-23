@@ -16,7 +16,7 @@
 | D12 | Geography | `ALLOWED_AREAS` is defined but never enforced on submit | listings.py `submit_listing` | #15 | ❌ |
 | D13 | Validation | Empty amenities are accepted on submit | listings.py `submit_listing` | #15 | ❌ |
 | D14 | Messaging | Students can message pending or rejected (hidden) listings; no eligibility check | listings.py `send_message` | #16 | ❌ |
-| D15 | Errors | Transition, submit and message failures all return 400, including unknown listings (no 403, 404 or 409) | accommodation.py | #14 | ❌ |
+| D15 | Errors | Transition, submit and message failures all return 400, including unknown listings (no 403, 404 or 409) | accommodation.py | #14 | ✅ |
 | D16 | Missing | No endpoints to edit or remove a listing, report a listing, view one listing, or list a landlord's own listings with feedback | accommodation.py | #14, #16, #17 | ❌ |
 | D17 | Data | `Listing` has no `deactivated_by` or `feedback` fields | models/listing.py | #11 | ✅ |
 | D18 | Tests | Scenario tests are 3 shallow smoke tests (the other starter tests cover only FastStart auth); no transition, visibility, eligibility or messaging tests | tests/ | #18-#20 | ❌ |

@@ -1,4 +1,8 @@
-"""Listing CRUD, browse filters, messaging, and lifecycle transitions."""
+"""Listing CRUD, browse filters, messaging, and lifecycle transitions.
+
+Failures raise the exceptions in app.exceptions; app.main maps them to
+HTTP status codes (400, 403, 404, 409).
+"""
 
 from __future__ import annotations
 
@@ -8,11 +12,10 @@ from typing import Any
 from sqlmodel import Session
 
 from app.database import engine
-from app.exceptions import InvalidTransition
+from app.exceptions import InvalidRequest, InvalidTransition, NotFound, NotPermitted
 from app.models.listing import Listing
 from app.models.message import Message
 from app.repositories import ListingRepository, MessageRepository
-from app.services.housing_auth import get_user
 from app.services.lifecycle import ACTIONS, visible_to_students
 
 ALLOWED_AREAS = {"st_augustine", "mount_hope"}
@@ -26,8 +29,26 @@ def _parse_amenities(raw: str) -> list[str]:
     return [a.strip().lower() for a in (raw or "").split(",") if a.strip()]
 
 
+def _require_role(actor: dict[str, Any], *roles: str) -> None:
+    if actor["role"] not in roles:
+        raise NotPermitted(f"{' or '.join(roles)} only")
+
+
+def _get_listing(repo: ListingRepository, listing_id: int, actor: dict[str, Any]) -> Listing:
+    """Fetch a listing, enforcing that landlords only touch their own."""
+    listing = repo.get_by_id(listing_id)
+
+    if listing is None:
+        raise NotFound("listing not found")
+
+    if actor["role"] == "landlord" and listing.landlord_id != actor["id"]:
+        raise NotPermitted("you can only manage your own listings")
+
+    return listing
+
+
 def submit_listing(
-    landlord_id: int,
+    actor: dict[str, Any],
     *,
     title: str,
     area: str,
@@ -41,30 +62,27 @@ def submit_listing(
     has_kitchen: bool = False,
     description: str = "",
 ) -> dict[str, Any]:
-    user = get_user(landlord_id)
-
-    if not user or user["role"] != "landlord":
-        return {"ok": False, "error": "landlords only"}
+    _require_role(actor, "landlord")
 
     if area not in ALLOWED_AREAS:
-        return {"ok": False, "error": "invalid accommodation area"}
+        raise InvalidRequest("invalid accommodation area")
 
     if price <= 0:
-        return {"ok": False, "error": "price must be positive"}
+        raise InvalidRequest("price must be positive")
 
     if not amenities.strip():
-        return {"ok": False, "error": "amenities are required"}
+        raise InvalidRequest("amenities are required")
 
     if bedrooms < 0:
-        return {"ok": False, "error": "bedrooms cannot be negative"}
+        raise InvalidRequest("bedrooms cannot be negative")
 
     if bathrooms < 0:
-        return {"ok": False, "error": "bathrooms cannot be negative"}
+        raise InvalidRequest("bathrooms cannot be negative")
 
     with Session(engine) as session:
         listing = ListingRepository(session).save(
             Listing(
-                landlord_id=landlord_id,
+                landlord_id=actor["id"],
                 title=title,
                 area=area,
                 price=price,
@@ -85,48 +103,32 @@ def submit_listing(
 
 
 def transition(
-    actor_id: int,
+    actor: dict[str, Any],
     listing_id: int,
     action: str,
     feedback: str | None = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    actor = get_user(actor_id)
+    _require_role(actor, "admin", "landlord")
 
-    if not actor:
-        return {"ok": False, "error": "unknown user"}
-
+    # submit and significant_edit are triggered by create/edit, not by clients.
     if action not in ACTIONS:
-        return {"ok": False, "error": f"action must be one of {ACTIONS}"}
+        raise InvalidRequest(f"action must be one of {ACTIONS}")
 
     with Session(engine) as session:
         repo = ListingRepository(session)
-        listing = repo.get_by_id(listing_id)
+        listing = _get_listing(repo, listing_id, actor)
 
-        if listing is None:
-            return {"ok": False, "error": "listing not found"}
-
-        # Landlords can only manage their own listings.
-        if actor["role"] == "landlord":
-            if listing.landlord_id != actor_id:
-                return {
-                    "ok": False,
-                    "error": "you can only manage your own listings",
-                }
-
-        elif actor["role"] != "admin":
-            return {"ok": False, "error": "admin/landlord only"}
-
-        try:
-            # Delegate the transition to the listing's current State object.
-            listing.transition(
-                action=action,
-                actor_role=actor["role"],
-                feedback=feedback,
-                reason=reason,
-            )
-        except InvalidTransition as error:
-            return {"ok": False, "error": str(error)}
+        # The listing's current State object enforces the rest (role, reason,
+        # allowed transition) and raises NotPermitted / InvalidRequest /
+        # InvalidTransition. The spec names the field `reason`; `feedback`
+        # is accepted too.
+        listing.transition(
+            action=action,
+            actor_role=actor["role"],
+            feedback=feedback or reason,
+            reason=reason,
+        )
 
         listing = repo.save(listing)
 
@@ -134,19 +136,13 @@ def transition(
 
 
 def edit_listing(
-    actor_id: int,
+    actor: dict[str, Any],
     listing_id: int,
     updates: dict[str, Any],
 ) -> dict[str, Any]:
     """Edit a landlord's listing and trigger review for significant changes."""
 
-    actor = get_user(actor_id)
-
-    if not actor:
-        return {"ok": False, "error": "unknown user"}
-
-    if actor["role"] != "landlord":
-        return {"ok": False, "error": "landlords only"}
+    _require_role(actor, "landlord")
 
     allowed_fields = {
         "title",
@@ -169,17 +165,17 @@ def edit_listing(
     }
 
     if not updates:
-        return {"ok": False, "error": "no valid changes provided"}
+        raise InvalidRequest("no valid changes provided")
 
     if "area" in updates and updates["area"] not in ALLOWED_AREAS:
-        return {"ok": False, "error": "invalid accommodation area"}
+        raise InvalidRequest("invalid accommodation area")
 
     if "price" in updates and updates["price"] <= 0:
-        return {"ok": False, "error": "price must be positive"}
+        raise InvalidRequest("price must be positive")
 
     for field in ("bedrooms", "bathrooms"):
         if field in updates and updates[field] < 0:
-            return {"ok": False, "error": f"{field} cannot be negative"}
+            raise InvalidRequest(f"{field} cannot be negative")
 
     significant_fields = {
         "title",
@@ -194,16 +190,7 @@ def edit_listing(
 
     with Session(engine) as session:
         repo = ListingRepository(session)
-        listing = repo.get_by_id(listing_id)
-
-        if listing is None:
-            return {"ok": False, "error": "listing not found"}
-
-        if listing.landlord_id != actor_id:
-            return {
-                "ok": False,
-                "error": "you can only manage your own listings",
-            }
+        listing = _get_listing(repo, listing_id, actor)
 
         changed_fields = {
             field
@@ -220,13 +207,10 @@ def edit_listing(
             "active",
             "inactive",
         }:
-            try:
-                listing.transition(
-                    action="significant_edit",
-                    actor_role="landlord",
-                )
-            except InvalidTransition as error:
-                return {"ok": False, "error": str(error)}
+            listing.transition(
+                action="significant_edit",
+                actor_role="landlord",
+            )
 
         for field, value in updates.items():
             setattr(listing, field, value)
@@ -237,33 +221,18 @@ def edit_listing(
 
 
 def remove_listing(
-    landlord_id: int,
+    actor: dict[str, Any],
     listing_id: int,
 ) -> dict[str, Any]:
     """Permanently remove a landlord's listing and its messages."""
 
-    actor = get_user(landlord_id)
-
-    if not actor:
-        return {"ok": False, "error": "unknown user"}
-
-    if actor["role"] != "landlord":
-        return {"ok": False, "error": "landlords only"}
+    _require_role(actor, "landlord")
 
     with Session(engine) as session:
         listing_repo = ListingRepository(session)
         message_repo = MessageRepository(session)
 
-        listing = listing_repo.get_by_id(listing_id)
-
-        if listing is None:
-            return {"ok": False, "error": "listing not found"}
-
-        if listing.landlord_id != landlord_id:
-            return {
-                "ok": False,
-                "error": "you can only manage your own listings",
-            }
+        listing = _get_listing(listing_repo, listing_id, actor)
 
         try:
             message_repo.delete_for_listing(listing_id)
@@ -275,19 +244,14 @@ def remove_listing(
         return {"ok": True, "message": "Listing removed successfully"}
 
 
-
-
 def browse_for_students(
-    student_id: int,
+    actor: dict[str, Any],
     *,
     area: str | None = None,
     max_price: int | None = None,
     amenity: str | None = None,
 ) -> dict[str, Any]:
-    student = get_user(student_id)
-
-    if not student or student["role"] != "student":
-        return {"ok": False, "error": "students only"}
+    _require_role(actor, "student")
 
     with Session(engine) as session:
         items = [
@@ -317,40 +281,47 @@ def browse_for_students(
     return {"ok": True, "listings": results}
 
 
-def list_all(*, status: str | None = None) -> list[dict[str, Any]]:
+def _list(status: str | None, landlord_id: int | None = None) -> dict[str, Any]:
     with Session(engine) as session:
-        return [
-            row.model_dump()
-            for row in ListingRepository(session).list_all(status)
-        ]
+        rows = ListingRepository(session).list_all(status, landlord_id)
+        return {"ok": True, "listings": [row.model_dump() for row in rows]}
+
+
+def list_for_admin(actor: dict[str, Any], *, status: str | None = None) -> dict[str, Any]:
+    """Every listing with its status, feedback and deactivation details."""
+    _require_role(actor, "admin")
+    return _list(status)
+
+
+def list_for_landlord(actor: dict[str, Any], *, status: str | None = None) -> dict[str, Any]:
+    """The landlord's own listings with status and admin feedback."""
+    _require_role(actor, "landlord")
+    return _list(status, landlord_id=actor["id"])
 
 
 def send_message(
-    student_id: int,
+    actor: dict[str, Any],
     listing_id: int,
     body: str,
 ) -> dict[str, Any]:
-    student = get_user(student_id)
-
-    if not student or student["role"] != "student":
-        return {"ok": False, "error": "students only"}
+    _require_role(actor, "student")
 
     if not body.strip():
-        return {"ok": False, "error": "body required"}
+        raise InvalidRequest("body required")
 
     with Session(engine) as session:
         listing = ListingRepository(session).get_by_id(listing_id)
 
         if listing is None:
-            return {"ok": False, "error": "listing not found"}
+            raise NotFound("listing not found")
 
         if listing.status != "active":
-            return {"ok": False, "error": "messages are only allowed for active listings"}
+            raise InvalidTransition("messages are only allowed for active listings")
 
         message = MessageRepository(session).create(
             Message(
                 listing_id=listing_id,
-                student_id=student_id,
+                student_id=actor["id"],
                 body=body,
                 created_at=_now(),
             )
