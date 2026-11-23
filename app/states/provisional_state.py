@@ -4,7 +4,8 @@ from app.exceptions import InvalidTransition
 
 class ProvisionalState(ListingState):
 
-    def transition(self, action, actor_role, feedback=None):
+    def transition(self, action, actor_role, feedback=None, reason=None):
+
         if action == "verify":
             self.require_role(actor_role, {"admin"})
             self.listing.status = "verified"
@@ -13,14 +14,14 @@ class ProvisionalState(ListingState):
 
         if action == "reject":
             self.require_role(actor_role, {"admin"})
-            self.listing.status = "rejected"
-            self.listing.feedback = feedback
-            return
 
-        if action == "resubmit":
-            self.require_role(actor_role, {"landlord", "admin"})
-            self.listing.status = "pending"
-            self.listing.feedback = None
+            if not feedback or not feedback.strip():
+                raise InvalidTransition(
+                    "A rejection reason is required"
+                )
+
+            self.listing.status = "rejected"
+            self.listing.feedback = feedback.strip()
             return
 
         raise InvalidTransition(

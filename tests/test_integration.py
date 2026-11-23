@@ -120,6 +120,34 @@ def test_landlord_can_activate_verified_listing(client, landlord, admin):
     assert response.json()["listing"]["status"] == "active"
 
 
+def test_deactivation_requires_reason(client, landlord, admin):
+    listing = create_test_listing(client, landlord)
+
+    # Admin verifies the listing.
+    client.post(
+        f"/api/listings/{listing['id']}/transition",
+        headers=admin,
+        json={"action": "verify"},
+    )
+
+    # Landlord activates the listing.
+    client.post(
+        f"/api/listings/{listing['id']}/transition",
+        headers=landlord,
+        json={"action": "activate"},
+    )
+
+    # Landlord attempts to deactivate without providing a reason.
+    response = client.post(
+        f"/api/listings/{listing['id']}/transition",
+        headers=landlord,
+        json={"action": "deactivate"},
+    )
+
+    assert response.status_code == 400
+    assert "deactivation reason is required" in response.json()["detail"].lower()
+
+
 def test_landlord_cannot_verify_listing(client, landlord):
     listing = create_test_listing(client, landlord)
 
@@ -129,7 +157,7 @@ def test_landlord_cannot_verify_listing(client, landlord):
         json={"action": "verify"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 403
 
 
 def test_landlord_cannot_manage_another_landlords_listing(
@@ -151,10 +179,10 @@ def test_landlord_cannot_manage_another_landlords_listing(
         json={"action": "activate"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 403
 
 
-def test_invalid_transition_returns_bad_request(client, landlord):
+def test_invalid_transition_returns_conflict(client, landlord):
     listing = create_test_listing(client, landlord)
 
     response = client.post(
@@ -163,9 +191,29 @@ def test_invalid_transition_returns_bad_request(client, landlord):
         json={"action": "activate"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 409
 
-def test_students_only_see_active_listings(client, student, admin):
+def test_students_only_see_active_listings(
+    client, landlord, student, admin
+):
+    # Create one listing that will remain pending.
+    pending_listing = create_test_listing(client, landlord)
+
+    # Create another listing and make it active.
+    active_listing = create_test_listing(client, landlord)
+
+    client.post(
+        f"/api/listings/{active_listing['id']}/transition",
+        headers=admin,
+        json={"action": "verify"},
+    )
+
+    client.post(
+        f"/api/listings/{active_listing['id']}/transition",
+        headers=landlord,
+        json={"action": "activate"},
+    )
+
     response = client.get(
         "/api/student/listings",
         headers=student,
@@ -174,10 +222,14 @@ def test_students_only_see_active_listings(client, student, admin):
     assert response.status_code == 200
 
     listings = response.json()["listings"]
+    visible_ids = [item["id"] for item in listings]
+
+    assert active_listing["id"] in visible_ids
+    assert pending_listing["id"] not in visible_ids
 
     assert all(
-        listing["status"] == "active"
-        for listing in listings
+        item["status"] == "active"
+        for item in listings
     )
 
 
@@ -204,4 +256,4 @@ def test_landlord_cannot_activate_rejected_listing(client, landlord, listing):
         json={"action": "activate"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 409

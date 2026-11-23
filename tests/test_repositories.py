@@ -63,3 +63,26 @@ def test_message_create(test_session):
 
     assert msg.id is not None
     assert test_session.get(Message, msg.id).body == "Is it available?"
+
+def test_listing_delete_removes_associated_messages(test_session):
+    listing_repo = ListingRepository(test_session)
+    message_repo = MessageRepository(test_session)
+
+    listing = listing_repo.save(make_listing("active"))
+
+    message = message_repo.create(
+        Message(
+            listing_id=listing.id,
+            student_id=2,
+            body="Is this apartment available?",
+            created_at="2099-01-01T10:00:00+00:00",
+        )
+    )
+
+    message_repo.delete_for_listing(listing.id)
+    listing_repo.delete(listing)
+
+    test_session.expire_all()
+
+    assert listing_repo.get_by_id(listing.id) is None
+    assert test_session.get(Message, message.id) is None

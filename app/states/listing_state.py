@@ -10,11 +10,19 @@ class ListingState(ABC):
         self.listing = listing
 
     @abstractmethod
-    def transition(self, action: str, actor_role: str, feedback: str | None = None):
+    def transition(
+        self,
+        action: str,
+        actor_role: str,
+        feedback: str | None = None,
+        reason: str | None = None,
+    ):
         """Perform an action or raise InvalidTransition."""
         pass
 
     def require_role(self, actor_role: str, allowed_roles: set[str]):
+        """Ensure the actor has permission to perform an action."""
+
         if actor_role not in allowed_roles:
             raise InvalidTransition(
                 f"This action is not permitted for role: {actor_role}"

@@ -16,6 +16,8 @@ from app.states import (
 class Listing(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     landlord_id: int = Field(index=True)
+
+    # Existing listing information
     title: str
     area: str
     price: int
@@ -24,10 +26,18 @@ class Listing(SQLModel, table=True):
     contact_email: str
     photos: str = ""
 
-    status: str
+    # Additional property information
+    bedrooms: int = Field(default=0)
+    bathrooms: int = Field(default=0)
+    has_kitchen: bool = Field(default=False)
+    description: str = ""
 
+    # Lifecycle information
+    status: str
     deactivated_by: Optional[str] = None
+    deactivation_reason: Optional[str] = None
     feedback: Optional[str] = None
+
     created_at: str
 
     def get_state(self):
@@ -56,8 +66,14 @@ class Listing(SQLModel, table=True):
         action: str,
         actor_role: str,
         feedback: str | None = None,
+        reason: str | None = None,
     ):
-        """Delegate the requested transition to the current state."""
+        """Delegate the requested transition to the current State object."""
 
         current_state = self.get_state()
-        current_state.transition(action, actor_role, feedback)
+        current_state.transition(
+            action,
+            actor_role,
+            feedback,
+            reason,
+        )

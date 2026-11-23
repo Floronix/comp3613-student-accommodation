@@ -36,6 +36,10 @@ def submit_listing(
     contact_phone: str,
     contact_email: str,
     photos: str = "",
+    bedrooms: int = 0,
+    bathrooms: int = 0,
+    has_kitchen: bool = False,
+    description: str = "",
 ) -> dict[str, Any]:
     user = get_user(landlord_id)
 
@@ -51,6 +55,12 @@ def submit_listing(
     if not amenities.strip():
         return {"ok": False, "error": "amenities are required"}
 
+    if bedrooms < 0:
+        return {"ok": False, "error": "bedrooms cannot be negative"}
+
+    if bathrooms < 0:
+        return {"ok": False, "error": "bathrooms cannot be negative"}
+
     with Session(engine) as session:
         listing = ListingRepository(session).save(
             Listing(
@@ -62,6 +72,10 @@ def submit_listing(
                 contact_phone=contact_phone,
                 contact_email=contact_email,
                 photos=photos,
+                bedrooms=bedrooms,
+                bathrooms=bathrooms,
+                has_kitchen=has_kitchen,
+                description=description,
                 status="pending",
                 created_at=_now(),
             )
@@ -75,6 +89,7 @@ def transition(
     listing_id: int,
     action: str,
     feedback: str | None = None,
+    reason: str | None = None,
 ) -> dict[str, Any]:
     actor = get_user(actor_id)
 
@@ -94,7 +109,10 @@ def transition(
         # Landlords can only manage their own listings.
         if actor["role"] == "landlord":
             if listing.landlord_id != actor_id:
-                return {"ok": False, "error": "you can only manage your own listings"}
+                return {
+                    "ok": False,
+                    "error": "you can only manage your own listings",
+                }
 
         elif actor["role"] != "admin":
             return {"ok": False, "error": "admin/landlord only"}
@@ -105,6 +123,7 @@ def transition(
                 action=action,
                 actor_role=actor["role"],
                 feedback=feedback,
+                reason=reason,
             )
         except InvalidTransition as error:
             return {"ok": False, "error": str(error)}
@@ -112,6 +131,150 @@ def transition(
         listing = repo.save(listing)
 
         return {"ok": True, "listing": listing.model_dump()}
+
+
+def edit_listing(
+    actor_id: int,
+    listing_id: int,
+    updates: dict[str, Any],
+) -> dict[str, Any]:
+    """Edit a landlord's listing and trigger review for significant changes."""
+
+    actor = get_user(actor_id)
+
+    if not actor:
+        return {"ok": False, "error": "unknown user"}
+
+    if actor["role"] != "landlord":
+        return {"ok": False, "error": "landlords only"}
+
+    allowed_fields = {
+        "title",
+        "area",
+        "price",
+        "amenities",
+        "contact_phone",
+        "contact_email",
+        "photos",
+        "bedrooms",
+        "bathrooms",
+        "has_kitchen",
+        "description",
+    }
+
+    updates = {
+        key: value
+        for key, value in updates.items()
+        if key in allowed_fields and value is not None
+    }
+
+    if not updates:
+        return {"ok": False, "error": "no valid changes provided"}
+
+    if "area" in updates and updates["area"] not in ALLOWED_AREAS:
+        return {"ok": False, "error": "invalid accommodation area"}
+
+    if "price" in updates and updates["price"] <= 0:
+        return {"ok": False, "error": "price must be positive"}
+
+    for field in ("bedrooms", "bathrooms"):
+        if field in updates and updates[field] < 0:
+            return {"ok": False, "error": f"{field} cannot be negative"}
+
+    significant_fields = {
+        "title",
+        "area",
+        "price",
+        "amenities",
+        "bedrooms",
+        "bathrooms",
+        "has_kitchen",
+        "description",
+    }
+
+    with Session(engine) as session:
+        repo = ListingRepository(session)
+        listing = repo.get_by_id(listing_id)
+
+        if listing is None:
+            return {"ok": False, "error": "listing not found"}
+
+        if listing.landlord_id != actor_id:
+            return {
+                "ok": False,
+                "error": "you can only manage your own listings",
+            }
+
+        changed_fields = {
+            field
+            for field, value in updates.items()
+            if getattr(listing, field) != value
+        }
+
+        significant_change = bool(
+            changed_fields.intersection(significant_fields)
+        )
+
+        if significant_change and listing.status in {
+            "verified",
+            "active",
+            "inactive",
+        }:
+            try:
+                listing.transition(
+                    action="significant_edit",
+                    actor_role="landlord",
+                )
+            except InvalidTransition as error:
+                return {"ok": False, "error": str(error)}
+
+        for field, value in updates.items():
+            setattr(listing, field, value)
+
+        listing = repo.save(listing)
+
+        return {"ok": True, "listing": listing.model_dump()}
+
+
+def remove_listing(
+    landlord_id: int,
+    listing_id: int,
+) -> dict[str, Any]:
+    """Permanently remove a landlord's listing and its messages."""
+
+    actor = get_user(landlord_id)
+
+    if not actor:
+        return {"ok": False, "error": "unknown user"}
+
+    if actor["role"] != "landlord":
+        return {"ok": False, "error": "landlords only"}
+
+    with Session(engine) as session:
+        listing_repo = ListingRepository(session)
+        message_repo = MessageRepository(session)
+
+        listing = listing_repo.get_by_id(listing_id)
+
+        if listing is None:
+            return {"ok": False, "error": "listing not found"}
+
+        if listing.landlord_id != landlord_id:
+            return {
+                "ok": False,
+                "error": "you can only manage your own listings",
+            }
+
+        try:
+            message_repo.delete_for_listing(listing_id)
+            listing_repo.delete(listing)
+        except Exception:
+            session.rollback()
+            raise
+
+        return {"ok": True, "message": "Listing removed successfully"}
+
+
 
 
 def browse_for_students(
