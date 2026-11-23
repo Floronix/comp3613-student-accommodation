@@ -37,6 +37,20 @@ def test_student_browse():
         json={"email": "student@example.com", "password": "stud-dev"},
     )
     uid = login.json()["user"]["id"]
-    r = client.get("/api/student/listings", headers={"X-User-Id": str(uid)})
+
+    r = client.get(
+        "/api/student/listings",
+        headers={"X-User-Id": str(uid)},
+    )
+
     assert r.status_code == 200
-    assert isinstance(r.json()["listings"], list)
+
+    listings = r.json()["listings"]
+
+    assert isinstance(listings, list)
+    assert all(listing["status"] == "active" for listing in listings)
+
+    titles = [listing["title"] for listing in listings]
+
+    assert "Verified Active Flat" in titles
+    assert "Pending Unit" not in titles

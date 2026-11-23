@@ -88,10 +88,6 @@ def seed(*, reset: bool = False) -> None:
                     contact_email="landlord@example.com",
                     photos="photo1.jpg",
                     status="active",
-                    flag_pending=0,
-                    flag_verified=1,
-                    flag_active=1,
-                    flag_rejected=0,
                     created_at="2099-01-01T10:00:00+00:00",
                 ),
                 Listing(
@@ -104,26 +100,26 @@ def seed(*, reset: bool = False) -> None:
                     contact_email="landlord@example.com",
                     photos="",
                     status="pending",
-                    flag_pending=1,
-                    flag_verified=0,
-                    flag_active=0,
-                    flag_rejected=0,
                     created_at="2099-01-02T10:00:00+00:00",
                 ),
             ]
         )
         session.commit()
 
+
 def seed_all_states() -> None:
-    """Extra listings, one per lifecycle state, for tests and demos.
+    """Create sample listings for all six lifecycle states."""
 
-    Not called by seed(), so the default seed data and ids are unchanged.
-    """
     with Session(engine) as session:
-        l1 = session.exec(select(User).where(User.email == "landlord@example.com")).one()
-        l2 = session.exec(select(User).where(User.email == "landlord2@example.com")).one()
+        l1 = session.exec(
+            select(User).where(User.email == "landlord@example.com")
+        ).one()
 
-        def make(landlord, title, status, pending=0, verified=0, active=0, rejected=0):
+        l2 = session.exec(
+            select(User).where(User.email == "landlord2@example.com")
+        ).one()
+
+        def make(landlord, title, status):
             return Listing(
                 landlord_id=landlord.id,
                 title=title,
@@ -134,22 +130,17 @@ def seed_all_states() -> None:
                 contact_email=landlord.email,
                 photos="",
                 status=status,
-                flag_pending=pending,
-                flag_verified=verified,
-                flag_active=active,
-                flag_rejected=rejected,
                 created_at="2099-01-03T10:00:00+00:00",
             )
 
-        session.add_all(
-            [
-                make(l1, "Provisional Unit", "provisional"),
-                make(l1, "Verified Unit", "verified", verified=1),
-                make(l1, "Inactive Unit", "inactive", verified=1),
-                make(l1, "Rejected Unit", "rejected", rejected=1),
-                make(l2, "Other Landlord Pending", "pending", pending=1),
-            ]
-        )
+        session.add_all([
+            make(l1, "Provisional Unit", "provisional"),
+            make(l1, "Verified Unit", "verified"),
+            make(l1, "Inactive Unit", "inactive"),
+            make(l1, "Rejected Unit", "rejected"),
+            make(l2, "Other Landlord Pending", "pending"),
+        ])
+
         session.commit()
 
 if __name__ == "__main__":

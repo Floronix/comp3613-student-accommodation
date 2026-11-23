@@ -28,6 +28,18 @@ class ListingRepository:
 
     def list_all(self, status: str | None = None) -> list[Listing]:
         stmt = select(Listing).order_by(Listing.id)
+
         if status:
             stmt = stmt.where(Listing.status == status)
+
         return list(self.db.exec(stmt).all())
+
+    def delete(self, listing: Listing) -> None:
+        """Permanently delete a listing and commit the transaction."""
+        try:
+            self.db.delete(listing)
+            self.db.commit()
+        except Exception as e:
+            logger.error(f"An error occurred while deleting listing: {e}")
+            self.db.rollback()
+            raise
