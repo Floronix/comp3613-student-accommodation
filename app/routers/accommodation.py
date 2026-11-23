@@ -139,6 +139,14 @@ def browse(
     )
 
 
+@router.get("/student/listings/{listing_id}")
+def student_listing(
+    listing_id: int, actor: Actor = Depends(current_actor)
+) -> dict[str, Any]:
+    """One listing by direct link; 404 unless it is visible to students."""
+    return listings.get_for_student(actor, listing_id)
+
+
 @router.get("/admin/listings")
 def admin_list(
     status: str | None = None, actor: Actor = Depends(current_actor)

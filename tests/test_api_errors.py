@@ -78,6 +78,8 @@ def test_missing_or_unknown_user_is_401_json(client, listing, headers):
         ("get", "/api/landlord/listings", "admin", None, None, 403),
         ("get", "/api/landlord/listings", "student", None, None, 403),
         ("get", "/api/admin/listings", "landlord", None, None, 403),
+        ("get", "/api/student/listings/{id}", "landlord", "Verified Active Flat", None, 403),
+        ("get", "/api/student/listings/{id}", "admin", "Verified Active Flat", None, 403),
     ],
 )
 def test_other_endpoint_error_codes(client, request, listing, method, path, who, title, body, code):
@@ -167,3 +169,43 @@ def test_admin_deactivation_is_recorded_in_views(client, admin, landlord, listin
         json={"action": "activate"},
     )
     assert r.status_code == 409
+
+
+# --- Student direct links (D16 "view one listing") ---
+
+STUDENT_LISTING = "/api/student/listings/{}"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [None, "Pending Unit", "Provisional Unit", "Verified Unit", "Inactive Unit", "Rejected Unit"],
+)
+def test_missing_and_hidden_listings_return_the_same_404(client, student, listing, title):
+    r = client.get(STUDENT_LISTING.format(_id(listing, title)), headers=student)
+
+    assert r.status_code == 404
+    assert r.json() == {"detail": "listing not found"}
+
+
+def test_student_can_open_active_listing_by_direct_link(client, student, listing):
+    active = listing["Verified Active Flat"]
+
+    r = client.get(STUDENT_LISTING.format(active["id"]), headers=student)
+
+    assert r.status_code == 200
+    assert r.json()["listing"]["id"] == active["id"]
+    assert r.json()["listing"]["contact_phone"] == active["contact_phone"]
+
+
+def test_direct_link_stops_working_once_listing_is_deactivated(
+    client, student, landlord, listing
+):
+    active_id = listing["Verified Active Flat"]["id"]
+
+    client.post(
+        f"/api/listings/{active_id}/transition",
+        headers=landlord,
+        json={"action": "deactivate"},
+    )
+
+    assert client.get(STUDENT_LISTING.format(active_id), headers=student).status_code == 404

@@ -284,6 +284,20 @@ def browse_for_students(
     return {"ok": True, "listings": results}
 
 
+def get_for_student(actor: dict[str, Any], listing_id: int) -> dict[str, Any]:
+    """One listing by direct link. Hidden listings look the same as missing ones."""
+    _require_role(actor, "students only", "student")
+
+    with Session(engine) as session:
+        listing = ListingRepository(session).get_by_id(listing_id)
+        item = listing.model_dump() if listing else None
+
+    if item is None or not visible_to_students(item):
+        raise NotFound("listing not found")
+
+    return {"ok": True, "listing": item}
+
+
 def _list(status: str | None, landlord_id: int | None = None) -> dict[str, Any]:
     with Session(engine) as session:
         rows = ListingRepository(session).list_all(status, landlord_id)
