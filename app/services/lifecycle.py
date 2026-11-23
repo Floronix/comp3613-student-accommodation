@@ -4,7 +4,6 @@ ACTIONS = (
     "reject",
     "activate",
     "deactivate",
-    "significant_edit",
     "restore",
     "resubmit",
 )

@@ -34,6 +34,7 @@ class PendingState(ListingState):
 
             self.listing.status = "rejected"
             self.listing.feedback = feedback.strip()
+            self.listing.edited_after_rejection = False
             return
 
         raise InvalidTransition(
