@@ -23,6 +23,7 @@
 | D19 | Security | `GET /api/users` requires no authentication and lists every user | routers/users.py | #15 | ❌ |
 | D20 | Messaging | Landlords cannot read or reply to messages; `Message` has no sender or direction field | models/message.py, accommodation.py | #16 | ❌ |
 | D21 | Architecture | `listings.py` uses `Session(engine)` directly and bypasses the repository layer | services/listings.py | #11 | ✅ |
+| D22 | Errors | The 401 exception handler renders `401.html` with status 200 for every request, so API 401s (bad login, missing `X-User-Id`) come back as 200 HTML | main.py | #14 | ❌ |
 
 ## Verified
 - Referral only: there are no payment, booking or contract endpoints.
