@@ -58,6 +58,7 @@ def update_listing_schema() -> None:
         "has_kitchen": "BOOLEAN NOT NULL DEFAULT FALSE",
         "description": "VARCHAR NOT NULL DEFAULT ''",
         "deactivation_reason": "VARCHAR",
+        "edited_after_rejection": "BOOLEAN NOT NULL DEFAULT FALSE",
     }
 
     with engine.begin() as connection:

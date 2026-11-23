@@ -37,6 +37,7 @@ class Listing(SQLModel, table=True):
     deactivated_by: Optional[str] = None
     deactivation_reason: Optional[str] = None
     feedback: Optional[str] = None
+    edited_after_rejection: bool = Field(default=False)
 
     created_at: str
 

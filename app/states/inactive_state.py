@@ -9,11 +9,6 @@ class InactiveState(ListingState):
         if action == "activate":
             self.require_role(actor_role, {"landlord"})
 
-            if self.listing.deactivation_reason == "rented":
-                raise InvalidTransition(
-                    "A rented listing cannot be reactivated"
-                )
-
             if self.listing.deactivated_by != "landlord":
                 raise InvalidTransition(
                     "Only landlord-deactivated listings can be reactivated by landlords"
@@ -26,6 +21,12 @@ class InactiveState(ListingState):
 
         if action == "restore":
             self.require_role(actor_role, {"admin"})
+
+            if self.listing.deactivated_by != "admin":
+                raise InvalidTransition(
+                    "Only admin-deactivated listings can be restored"
+                )
+
             self.listing.status = "active"
             self.listing.deactivated_by = None
             self.listing.deactivation_reason = None

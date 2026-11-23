@@ -85,6 +85,21 @@ def test_admin_can_provisionally_approve_listing(client, landlord, admin):
     assert response.json()["listing"]["status"] == "provisional"
     assert response.json()["listing"]["feedback"] == "Additional documents required"
 
+def test_admin_can_reject_listing_using_reason(client, landlord, admin):
+    listing = create_test_listing(client, landlord)
+
+    response = client.post(
+        f"/api/listings/{listing['id']}/transition",
+        headers=admin,
+        json={
+            "action": "reject",
+            "reason": "Missing property documents",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["listing"]["status"] == "rejected"
+    assert response.json()["listing"]["feedback"] == "Missing property documents"
 
 def test_admin_can_verify_listing(client, landlord, admin):
     listing = create_test_listing(client, landlord)
@@ -120,7 +135,7 @@ def test_landlord_can_activate_verified_listing(client, landlord, admin):
     assert response.json()["listing"]["status"] == "active"
 
 
-def test_deactivation_requires_reason(client, landlord, admin):
+def test_landlord_can_deactivate_without_reason(client, landlord, admin):
     listing = create_test_listing(client, landlord)
 
     # Admin verifies the listing.
@@ -137,15 +152,17 @@ def test_deactivation_requires_reason(client, landlord, admin):
         json={"action": "activate"},
     )
 
-    # Landlord attempts to deactivate without providing a reason.
+    # Landlord deactivates without providing a reason.
     response = client.post(
         f"/api/listings/{listing['id']}/transition",
         headers=landlord,
         json={"action": "deactivate"},
     )
 
-    assert response.status_code == 400
-    assert "deactivation reason is required" in response.json()["detail"].lower()
+    assert response.status_code == 200
+    assert response.json()["listing"]["status"] == "inactive"
+    assert response.json()["listing"]["deactivated_by"] == "landlord"
+    assert response.json()["listing"]["deactivation_reason"] is None
 
 
 def test_landlord_cannot_verify_listing(client, landlord):
@@ -193,6 +210,19 @@ def test_invalid_transition_returns_conflict(client, landlord):
 
     assert response.status_code == 409
 
+def test_landlord_cannot_call_significant_edit_directly(
+    client, landlord
+):
+    listing = create_test_listing(client, landlord)
+
+    response = client.post(
+        f"/api/listings/{listing['id']}/transition",
+        headers=landlord,
+        json={"action": "significant_edit"},
+    )
+
+    assert response.status_code == 400
+
 def test_students_only_see_active_listings(
     client, landlord, student, admin
 ):
@@ -232,9 +262,37 @@ def test_students_only_see_active_listings(
         for item in listings
     )
 
-
-def test_landlord_can_resubmit_rejected_listing(client, landlord, admin, listing):
+def test_landlord_cannot_resubmit_rejected_listing_without_edit(
+    client, landlord, listing
+):
     rejected = listing["Rejected Unit"]
+
+    response = client.post(
+        f"/api/listings/{rejected['id']}/transition",
+        headers=landlord,
+        json={"action": "resubmit"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "A rejected listing must be edited before it can be resubmitted"
+    )
+
+
+
+
+def test_landlord_can_resubmit_rejected_listing_after_edit(
+    client, landlord, listing
+):
+    rejected = listing["Rejected Unit"]
+
+    edit_response = client.patch(
+        f"/api/landlord/listings/{rejected['id']}",
+        headers=landlord,
+        json={"photos": "updated-photo.jpg"},
+    )
+
+    assert edit_response.status_code == 200
 
     response = client.post(
         f"/api/listings/{rejected['id']}/transition",
@@ -245,6 +303,7 @@ def test_landlord_can_resubmit_rejected_listing(client, landlord, admin, listing
     assert response.status_code == 200
     assert response.json()["listing"]["status"] == "pending"
     assert response.json()["listing"]["feedback"] is None
+    assert response.json()["listing"]["edited_after_rejection"] is False
 
 
 def test_landlord_cannot_activate_rejected_listing(client, landlord, listing):

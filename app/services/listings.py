@@ -122,7 +122,7 @@ def transition(
             listing.transition(
                 action=action,
                 actor_role=actor["role"],
-                feedback=feedback,
+                feedback=feedback or reason,
                 reason=reason,
             )
         except InvalidTransition as error:
@@ -210,6 +210,9 @@ def edit_listing(
             for field, value in updates.items()
             if getattr(listing, field) != value
         }
+
+        if listing.status == "rejected" and changed_fields:
+            listing.edited_after_rejection = True
 
         significant_change = bool(
             changed_fields.intersection(significant_fields)

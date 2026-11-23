@@ -9,12 +9,19 @@ class RejectedState(ListingState):
         if action == "resubmit":
             self.require_role(actor_role, {"landlord"})
 
+            if not self.listing.edited_after_rejection:
+                raise InvalidTransition(
+                    "A rejected listing must be edited before it can be resubmitted"
+                )
+
             self.listing.status = "pending"
             self.listing.feedback = None
             self.listing.deactivated_by = None
             self.listing.deactivation_reason = None
+            self.listing.edited_after_rejection = False
             return
 
         raise InvalidTransition(
             f"Cannot perform '{action}' while listing is rejected"
         )
+    

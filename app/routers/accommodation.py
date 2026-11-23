@@ -49,7 +49,7 @@ class ListingEditBody(BaseModel):
 
 class TransitionBody(BaseModel):
     action: str = Field(
-        description="approve_provisionally | verify | reject | activate | deactivate | significant_edit | restore | resubmit"
+        description="approve_provisionally | verify | reject | activate | deactivate | restore | resubmit"
     )
     feedback: str | None = None
     reason: str | None = None
