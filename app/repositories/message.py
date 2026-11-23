@@ -1,6 +1,6 @@
 import logging
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.models.message import Message
 
@@ -21,3 +21,13 @@ class MessageRepository:
             logger.error(f"An error occurred while saving message: {e}")
             self.db.rollback()
             raise
+
+    def delete_for_listing(self, listing_id: int) -> None:
+        """Delete all messages associated with a listing."""
+
+        messages = self.db.exec(
+            select(Message).where(Message.listing_id == listing_id)
+        ).all()
+
+        for message in messages:
+            self.db.delete(message)

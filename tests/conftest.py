@@ -7,27 +7,41 @@ from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 from app.main import app as fastapi_app
 from app.seed import seed, seed_all_states
+from app.database import engine
 import app.models
 
 
 @pytest.fixture
 def test_session():
-    engine = create_engine(
+    test_engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-    SQLModel.metadata.drop_all(engine)
+
+    SQLModel.metadata.create_all(test_engine)
+
+    try:
+        with Session(test_engine) as session:
+            yield session
+    finally:
+        SQLModel.metadata.drop_all(test_engine)
+        test_engine.dispose()
+
 
 @pytest.fixture
 def client():
     """Fresh seeded database (all six states) and an API client."""
     seed(reset=True)
     seed_all_states()
-    return TestClient(fastapi_app)
+
+    test_client = TestClient(fastapi_app)
+
+    try:
+        yield test_client
+    finally:
+        test_client.close()
+        engine.dispose()
 
 
 @pytest.fixture
