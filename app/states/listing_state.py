@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from app.exceptions import InvalidTransition
+from app.exceptions import InvalidTransition, NotPermitted
 
 
 class ListingState(ABC):
@@ -24,7 +24,7 @@ class ListingState(ABC):
         """Ensure the actor has permission to perform an action."""
 
         if actor_role not in allowed_roles:
-            raise InvalidTransition(
+            raise NotPermitted(
                 f"This action is not permitted for role: {actor_role}"
             )
 

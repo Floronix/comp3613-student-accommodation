@@ -555,7 +555,7 @@ def test_landlord_cannot_resubmit_rejected_listing_without_edit(
         json={"action": "resubmit"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 409
     assert response.json()["detail"] == (
         "A rejected listing must be edited before it can be resubmitted"
     )

@@ -26,11 +26,16 @@ class ListingRepository:
     def get_by_id(self, listing_id: int) -> Listing | None:
         return self.db.get(Listing, listing_id)
 
-    def list_all(self, status: str | None = None) -> list[Listing]:
+    def list_all(
+        self, status: str | None = None, landlord_id: int | None = None
+    ) -> list[Listing]:
         stmt = select(Listing).order_by(Listing.id)
 
         if status:
             stmt = stmt.where(Listing.status == status)
+
+        if landlord_id is not None:
+            stmt = stmt.where(Listing.landlord_id == landlord_id)
 
         return list(self.db.exec(stmt).all())
 

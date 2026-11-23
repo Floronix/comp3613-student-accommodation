@@ -1,10 +1,14 @@
-"""Student-accommodation scenario JSON API (OpenAPI /docs)."""
+"""Student-accommodation scenario JSON API (OpenAPI /docs).
+
+Service errors are mapped to status codes in app.main:
+InvalidRequest 400, NotPermitted 403, NotFound 404, InvalidTransition 409.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from app.services import housing_auth as auth
@@ -16,7 +20,6 @@ router = APIRouter(tags=["student-accommodation"])
 class LoginBody(BaseModel):
     email: str
     password: str
-
 
 
 class ListingBody(BaseModel):
@@ -51,8 +54,11 @@ class TransitionBody(BaseModel):
     action: str = Field(
         description="approve_provisionally | verify | reject | activate | deactivate | restore | resubmit"
     )
-    feedback: str | None = None
-    reason: str | None = None
+    reason: str | None = Field(
+        default=None,
+        description="Required for reject and approve_provisionally; optional deactivation reason",
+    )
+    feedback: str | None = Field(default=None, description="Alias for reason")
 
 
 class MessageBody(BaseModel):
@@ -60,44 +66,19 @@ class MessageBody(BaseModel):
     body: str
 
 
-def _actor_id(x_user_id: str | None) -> int:
+Actor = dict[str, Any]
+
+
+def current_actor(x_user_id: str | None = Header(default=None)) -> Actor:
     if not x_user_id:
         raise HTTPException(status_code=401, detail="X-User-Id header required")
     try:
-        return int(x_user_id)
+        actor = auth.get_user(int(x_user_id))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="X-User-Id must be int") from exc
-
-
-
-def _raise_listing_error(error: str) -> None:
-    if error in {"listing not found", "unknown user"}:
-        raise HTTPException(status_code=404, detail=error)
-
-    if (
-        error in {
-            "landlords only",
-            "students only",
-            "admin/landlord only",
-        }
-        or error.startswith("you can only manage your own listings")
-        or error.startswith("This action is not permitted")
-    ):
-        raise HTTPException(status_code=403, detail=error)
-
-    if (
-        error.startswith(
-            (
-                "Cannot perform",
-                "Only landlord-deactivated listings",
-                "Only admin-deactivated listings",
-            )
-        )
-        or error == "messages are only allowed for active listings"
-    ):
-        raise HTTPException(status_code=409, detail=error)
-
-    raise HTTPException(status_code=400, detail=error)
+    if actor is None:
+        raise HTTPException(status_code=401, detail="unknown user")
+    return actor
 
 
 @router.post("/auth/login")
@@ -109,113 +90,71 @@ def login(body: LoginBody) -> dict[str, Any]:
 
 
 @router.post("/landlord/listings")
-def submit(
-    body: ListingBody,
-    x_user_id: str | None = Header(default=None),
+def submit(body: ListingBody, actor: Actor = Depends(current_actor)) -> dict[str, Any]:
+    return listings.submit_listing(actor, **body.model_dump())
+
+
+@router.get("/landlord/listings")
+def landlord_list(
+    status: str | None = None, actor: Actor = Depends(current_actor)
 ) -> dict[str, Any]:
-    result = listings.submit_listing(
-        _actor_id(x_user_id),
-        title=body.title,
-        area=body.area,
-        price=body.price,
-        amenities=body.amenities,
-        contact_phone=body.contact_phone,
-        contact_email=body.contact_email,
-        photos=body.photos,
-        bedrooms=body.bedrooms,
-        bathrooms=body.bathrooms,
-        has_kitchen=body.has_kitchen,
-        description=body.description,
-    )
-
-    if not result.get("ok"):
-        _raise_listing_error(result.get("error", "Request failed"))
-
-    return result
+    """The caller's own listings, with status, feedback and deactivation details."""
+    return listings.list_for_landlord(actor, status=status)
 
 
 @router.post("/listings/{listing_id}/transition")
 def transition(
-    listing_id: int,
-    body: TransitionBody,
-    x_user_id: str | None = Header(default=None),
+    listing_id: int, body: TransitionBody, actor: Actor = Depends(current_actor)
 ) -> dict[str, Any]:
-    result = listings.transition(
-        _actor_id(x_user_id),
-        listing_id,
-        body.action,
-        body.feedback,
-        body.reason,
+    return listings.transition(
+        actor, listing_id, body.action, body.feedback, body.reason
     )
-    if not result.get("ok"):
-        _raise_listing_error(result.get("error", "Request failed"))
-    return result
+
 
 @router.patch("/landlord/listings/{listing_id}")
 def edit_listing(
-    listing_id: int,
-    body: ListingEditBody,
-    x_user_id: str | None = Header(default=None),
+    listing_id: int, body: ListingEditBody, actor: Actor = Depends(current_actor)
 ) -> dict[str, Any]:
-    result = listings.edit_listing(
-        _actor_id(x_user_id),
-        listing_id,
-        body.model_dump(exclude_unset=True),
+    return listings.edit_listing(
+        actor, listing_id, body.model_dump(exclude_unset=True)
     )
 
-    if not result.get("ok"):
-        _raise_listing_error(result.get("error", "Request failed"))
-
-    return result
 
 @router.delete("/landlord/listings/{listing_id}")
 def remove_listing(
-    listing_id: int,
-    x_user_id: str | None = Header(default=None),
+    listing_id: int, actor: Actor = Depends(current_actor)
 ) -> dict[str, Any]:
-    result = listings.remove_listing(
-        _actor_id(x_user_id),
-        listing_id,
-    )
+    return listings.remove_listing(actor, listing_id)
 
-    if not result.get("ok"):
-        _raise_listing_error(result.get("error", "Request failed"))
-
-    return result
 
 @router.get("/student/listings")
 def browse(
     area: str | None = None,
     max_price: int | None = None,
     amenity: str | None = None,
-    x_user_id: str | None = Header(default=None),
+    actor: Actor = Depends(current_actor),
 ) -> dict[str, Any]:
-    result = listings.browse_for_students(
-        _actor_id(x_user_id), area=area, max_price=max_price, amenity=amenity
+    return listings.browse_for_students(
+        actor, area=area, max_price=max_price, amenity=amenity
     )
-    if not result.get("ok"):
-        raise HTTPException(status_code=403, detail=result.get("error"))
-    return result
+
+
+@router.get("/student/listings/{listing_id}")
+def student_listing(
+    listing_id: int, actor: Actor = Depends(current_actor)
+) -> dict[str, Any]:
+    """One listing by direct link; 404 unless it is visible to students."""
+    return listings.get_for_student(actor, listing_id)
 
 
 @router.get("/admin/listings")
 def admin_list(
-    status: str | None = None, x_user_id: str | None = Header(default=None)
+    status: str | None = None, actor: Actor = Depends(current_actor)
 ) -> dict[str, Any]:
-    actor = auth.get_user(_actor_id(x_user_id))
-    if not actor or actor["role"] != "admin":
-        raise HTTPException(status_code=403, detail="admin only")
-    return {"listings": listings.list_all(status=status)}
+    """Every listing, with status, feedback and deactivation details."""
+    return listings.list_for_admin(actor, status=status)
 
 
 @router.post("/student/messages")
-def message(
-    body: MessageBody, x_user_id: str | None = Header(default=None)
-) -> dict[str, Any]:
-    result = listings.send_message(
-        _actor_id(x_user_id), body.listing_id, body.body
-    )
-    if not result.get("ok"):
-        _raise_listing_error(result.get("error", "Request failed"))
-
-    return result
+def message(body: MessageBody, actor: Actor = Depends(current_actor)) -> dict[str, Any]:
+    return listings.send_message(actor, body.listing_id, body.body)

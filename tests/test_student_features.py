@@ -111,10 +111,6 @@ def test_non_students_cannot_browse(client, request, who):
     assert client.get(BROWSE, headers=request.getfixturevalue(who)).status_code == 403
 
 
-D22 = "D22: 401 handler turns API 401s into a 200 HTML page (#14)"
-
-
-@pytest.mark.xfail(strict=True, reason=D22)
 def test_browse_requires_user_header(client):
     assert client.get(BROWSE).status_code == 401
 
@@ -130,7 +126,6 @@ def test_login_never_returns_password_material(client):
     assert "password" not in r.text
 
 
-@pytest.mark.xfail(strict=True, reason=D22)
 @pytest.mark.parametrize(
     "email,password",
     [("student@example.com", "wrong"), ("ghost@example.com", "stud-dev")],

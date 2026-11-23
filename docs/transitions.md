@@ -44,6 +44,8 @@ Anything not listed is not allowed and raises InvalidTransition.
 - Correcting a decision only uses transitions in the table. There is no direct admin override (e.g. rejected cannot go to verified without a landlord resubmit).
 - A landlord may remove their own listing in any state.
 - An action that isn't in the table returns 409 (InvalidTransition). An actor who isn't permitted returns 403. An unknown listing returns 404. A missing reason for reject or approve_provisionally returns 400.
+- An unknown action name, including `submit` or `significant_edit` sent to the transition endpoint, returns 400. A missing or unknown `X-User-Id` returns 401.
+- A transition whose condition isn't met (e.g. resubmit before editing, restore of a landlord-deactivated listing) returns 409.
 
 ## Notes
 - "Approved" in the requirements and interviews = verified (approved, not live) and active (approved and visible).

@@ -1,7 +1,7 @@
 
 import pytest
 
-from app.exceptions import InvalidTransition
+from app.exceptions import InvalidRequest, InvalidTransition, NotPermitted
 from app.models.listing import Listing
 
 
@@ -34,7 +34,7 @@ def test_pending_listing_can_be_approved_provisionally():
 def test_provisional_approval_requires_feedback():
     listing = make_listing()
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(InvalidRequest):
         listing.transition("approve_provisionally", "admin")
 
     assert listing.status == "pending"
@@ -60,7 +60,7 @@ def test_pending_listing_can_be_rejected():
 def test_rejection_requires_reason():
     listing = make_listing()
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(InvalidRequest):
         listing.transition("reject", "admin")
 
     assert listing.status == "pending"
@@ -161,7 +161,7 @@ def test_admin_cannot_activate_inactive_listing_directly():
     listing.deactivated_by = "admin"
     listing.deactivation_reason = "admin_deactivated"
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         listing.transition("activate", "admin")
 
     assert listing.status == "inactive"
@@ -171,7 +171,7 @@ def test_landlord_cannot_restore_inactive_listing():
     listing.deactivated_by = "admin"
     listing.deactivation_reason = "admin_deactivated"
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         listing.transition("restore", "landlord")
 
     assert listing.status == "inactive"
@@ -225,7 +225,7 @@ def test_active_listing_cannot_be_verified():
 def test_student_cannot_verify_listing():
     listing = make_listing()
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         listing.transition("verify", "student")
 
 def test_provisional_listing_can_be_verified():
@@ -246,7 +246,7 @@ def test_provisional_listing_can_be_rejected():
 def test_landlord_cannot_reject_provisional_listing():
     listing = make_listing("provisional")
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         listing.transition("reject", "landlord")
 
 def test_provisional_listing_cannot_be_activated():
@@ -258,7 +258,7 @@ def test_provisional_listing_cannot_be_activated():
 def test_student_cannot_activate_verified_listing():
     listing = make_listing("verified")
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         listing.transition("activate", "student")
 
 def test_unknown_listing_status_is_rejected():
@@ -328,7 +328,7 @@ def test_significant_edit_returns_inactive_listing_to_pending():
 def test_student_cannot_make_significant_edit():
     listing = make_listing("active")
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         listing.transition("significant_edit", "student")
 
     assert listing.status == "active"
@@ -366,7 +366,7 @@ def test_base_state_rejects_unauthorized_role():
     listing = make_listing("verified")
     state = listing.get_state()
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         state.require_role("student", {"admin"})
 
 def test_admin_cannot_resubmit_provisional_listing():
@@ -380,7 +380,7 @@ def test_admin_cannot_resubmit_provisional_listing():
 def test_admin_cannot_activate_verified_listing():
     listing = make_listing("verified")
 
-    with pytest.raises(InvalidTransition):
+    with pytest.raises(NotPermitted):
         listing.transition("activate", "admin")
 
     assert listing.status == "verified"
