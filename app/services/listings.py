@@ -256,6 +256,11 @@ def browse_for_students(
 ) -> dict[str, Any]:
     _require_role(actor, "students only", "student")
 
+    has_student_id = bool(str(student.get("student_id") or "").strip())
+    is_provisional_incoming = bool(student.get("provisional"))
+    if not (has_student_id or is_provisional_incoming):
+        return {"ok": False, "error": "student eligibility required"}
+
     with Session(engine) as session:
         items = [
             row.model_dump()
