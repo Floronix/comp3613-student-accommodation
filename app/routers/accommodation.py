@@ -86,7 +86,13 @@ def _raise_listing_error(error: str) -> None:
         raise HTTPException(status_code=403, detail=error)
 
     if (
-        error.startswith("Cannot perform")
+        error.startswith(
+            (
+                "Cannot perform",
+                "Only landlord-deactivated listings",
+                "Only admin-deactivated listings",
+            )
+        )
         or error == "messages are only allowed for active listings"
     ):
         raise HTTPException(status_code=409, detail=error)

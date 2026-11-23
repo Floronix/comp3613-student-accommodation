@@ -695,3 +695,138 @@ def test_submit_transition_cannot_reset_verified_listing(client, landlord, admin
     activated = client.post(path, headers=landlord, json={"action": "activate"})
     assert activated.status_code == 200
     assert activated.json()["listing"]["status"] == "active"
+
+
+def test_admin_can_deactivate_and_restore_active_listing(client, landlord, admin):
+    listing = create_test_listing(client, landlord)
+    path = f"/api/listings/{listing['id']}/transition"
+
+    verified = client.post(path, headers=admin, json={"action": "verify"})
+    assert verified.status_code == 200
+    assert verified.json()["listing"]["status"] == "verified"
+
+    activated = client.post(path, headers=landlord, json={"action": "activate"})
+    assert activated.status_code == 200
+    assert activated.json()["listing"]["status"] == "active"
+
+    deactivated = client.post(
+        path, headers=admin, json={"action": "deactivate", "reason": "Needs review"}
+    )
+    assert deactivated.status_code == 200
+    inactive = deactivated.json()["listing"]
+    assert inactive["status"] == "inactive"
+    assert inactive["deactivated_by"] == "admin"
+    assert inactive["deactivation_reason"] == "Needs review"
+
+    restored = client.post(path, headers=admin, json={"action": "restore"})
+    assert restored.status_code == 200
+    active = restored.json()["listing"]
+    assert active["status"] == "active"
+    assert active["deactivated_by"] is None
+    assert active["deactivation_reason"] is None
+
+
+def test_listing_transition_requires_authentication(client, landlord):
+    listing = create_test_listing(client, landlord)
+
+    response = client.post(
+        f"/api/listings/{listing['id']}/transition",
+        json={"action": "verify"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_student_cannot_transition_listing(client, landlord, student):
+    listing = create_test_listing(client, landlord)
+
+    response = client.post(
+        f"/api/listings/{listing['id']}/transition",
+        headers=student,
+        json={"action": "verify"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_landlord_can_reactivate_own_deactivated_listing(
+    client, landlord, admin
+):
+    listing = create_test_listing(client, landlord)
+    path = f"/api/listings/{listing['id']}/transition"
+
+    verified = client.post(path, headers=admin, json={"action": "verify"})
+    assert verified.status_code == 200
+    activated = client.post(path, headers=landlord, json={"action": "activate"})
+    assert activated.status_code == 200
+
+    deactivated = client.post(
+        path,
+        headers=landlord,
+        json={"action": "deactivate", "reason": "Temporarily unavailable"},
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["listing"]["deactivated_by"] == "landlord"
+
+    reactivated = client.post(path, headers=landlord, json={"action": "activate"})
+    assert reactivated.status_code == 200
+    active = reactivated.json()["listing"]
+    assert active["status"] == "active"
+    assert active["deactivated_by"] is None
+    assert active["deactivation_reason"] is None
+
+
+def test_landlord_cannot_reactivate_admin_deactivated_listing(
+    client, landlord, admin
+):
+    listing = create_test_listing(client, landlord)
+    path = f"/api/listings/{listing['id']}/transition"
+
+    verified = client.post(path, headers=admin, json={"action": "verify"})
+    assert verified.status_code == 200
+    activated = client.post(path, headers=landlord, json={"action": "activate"})
+    assert activated.status_code == 200
+    deactivated = client.post(
+        path,
+        headers=admin,
+        json={"action": "deactivate", "reason": "Needs review"},
+    )
+    assert deactivated.status_code == 200
+
+    denied = client.post(path, headers=landlord, json={"action": "activate"})
+
+    assert denied.status_code == 409
+    assert denied.json()["detail"] == (
+        "Only landlord-deactivated listings can be reactivated by landlords"
+    )
+
+    restored = client.post(path, headers=admin, json={"action": "restore"})
+    assert restored.status_code == 200
+    assert restored.json()["listing"]["status"] == "active"
+
+
+def test_admin_cannot_restore_landlord_deactivated_listing(
+    client, landlord, admin
+):
+    listing = create_test_listing(client, landlord)
+    path = f"/api/listings/{listing['id']}/transition"
+
+    verified = client.post(path, headers=admin, json={"action": "verify"})
+    assert verified.status_code == 200
+    activated = client.post(path, headers=landlord, json={"action": "activate"})
+    assert activated.status_code == 200
+    deactivated = client.post(
+        path,
+        headers=landlord,
+        json={"action": "deactivate", "reason": "Temporarily unavailable"},
+    )
+    assert deactivated.status_code == 200
+
+    denied = client.post(path, headers=admin, json={"action": "restore"})
+
+    assert denied.status_code == 409
+    assert denied.json()["detail"] == "Only admin-deactivated listings can be restored"
+
+    reactivated = client.post(path, headers=landlord, json={"action": "activate"})
+    assert reactivated.status_code == 200
+    assert reactivated.json()["listing"]["status"] == "active"
