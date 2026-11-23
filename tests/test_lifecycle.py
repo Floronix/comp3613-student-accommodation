@@ -112,14 +112,14 @@ def test_active_listing_can_be_deactivated():
     assert listing.deactivated_by == "landlord"
     assert listing.deactivation_reason == "withdrawn"
 
-def test_deactivation_requires_reason():
+def test_active_listing_can_be_deactivated_without_reason():
     listing = make_listing("active")
 
-    with pytest.raises(InvalidRequest):
-        listing.transition("deactivate", "landlord")
+    listing.transition("deactivate", "landlord")
 
-    assert listing.status == "active"
-    assert listing.deactivated_by is None
+    assert listing.status == "inactive"
+    assert listing.deactivated_by == "landlord"
+    assert listing.deactivation_reason is None
 
 
 def test_inactive_listing_can_be_activated_again():
@@ -133,15 +133,16 @@ def test_inactive_listing_can_be_activated_again():
     assert listing.deactivated_by is None
     assert listing.deactivation_reason is None
 
-def test_rented_listing_cannot_be_activated_again():
+def test_rented_listing_can_be_activated_again():
     listing = make_listing("inactive")
     listing.deactivated_by = "landlord"
     listing.deactivation_reason = "rented"
 
-    with pytest.raises(InvalidTransition):
-        listing.transition("activate", "landlord")
+    listing.transition("activate", "landlord")
 
-    assert listing.status == "inactive"
+    assert listing.status == "active"
+    assert listing.deactivated_by is None
+    assert listing.deactivation_reason is None
 
 def test_admin_can_restore_inactive_listing():
     listing = make_listing("inactive")
@@ -175,15 +176,38 @@ def test_landlord_cannot_restore_inactive_listing():
 
     assert listing.status == "inactive"
 
-def test_rejected_listing_can_be_resubmitted():
+def test_admin_cannot_restore_landlord_deactivated_listing():
+    listing = make_listing("inactive")
+    listing.deactivated_by = "landlord"
+    listing.deactivation_reason = "withdrawn"
+
+    with pytest.raises(InvalidTransition):
+        listing.transition("restore", "admin")
+
+    assert listing.status == "inactive"
+
+def test_rejected_listing_cannot_be_resubmitted_without_edit():
     listing = make_listing("rejected")
     listing.feedback = "Incorrect information"
+
+    with pytest.raises(InvalidTransition):
+        listing.transition("resubmit", "landlord")
+
+    assert listing.status == "rejected"
+    assert listing.feedback == "Incorrect information"
+
+
+def test_rejected_listing_can_be_resubmitted_after_edit():
+    listing = make_listing("rejected")
+    listing.feedback = "Incorrect information"
+    listing.edited_after_rejection = True
 
     listing.transition("resubmit", "landlord")
 
     assert listing.status == "pending"
     assert listing.feedback is None
     assert listing.deactivated_by is None
+    assert listing.edited_after_rejection is False
 
 def test_pending_listing_cannot_be_activated():
     listing = make_listing()

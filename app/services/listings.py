@@ -29,9 +29,9 @@ def _parse_amenities(raw: str) -> list[str]:
     return [a.strip().lower() for a in (raw or "").split(",") if a.strip()]
 
 
-def _require_role(actor: dict[str, Any], *roles: str) -> None:
+def _require_role(actor: dict[str, Any], error: str, *roles: str) -> None:
     if actor["role"] not in roles:
-        raise NotPermitted(f"{' or '.join(roles)} only")
+        raise NotPermitted(error)
 
 
 def _get_listing(repo: ListingRepository, listing_id: int, actor: dict[str, Any]) -> Listing:
@@ -62,7 +62,7 @@ def submit_listing(
     has_kitchen: bool = False,
     description: str = "",
 ) -> dict[str, Any]:
-    _require_role(actor, "landlord")
+    _require_role(actor, "landlords only", "landlord")
 
     if area not in ALLOWED_AREAS:
         raise InvalidRequest("invalid accommodation area")
@@ -109,7 +109,7 @@ def transition(
     feedback: str | None = None,
     reason: str | None = None,
 ) -> dict[str, Any]:
-    _require_role(actor, "admin", "landlord")
+    _require_role(actor, "admin/landlord only", "admin", "landlord")
 
     # submit and significant_edit are triggered by create/edit, not by clients.
     if action not in ACTIONS:
@@ -142,7 +142,7 @@ def edit_listing(
 ) -> dict[str, Any]:
     """Edit a landlord's listing and trigger review for significant changes."""
 
-    _require_role(actor, "landlord")
+    _require_role(actor, "landlords only", "landlord")
 
     allowed_fields = {
         "title",
@@ -198,6 +198,9 @@ def edit_listing(
             if getattr(listing, field) != value
         }
 
+        if listing.status == "rejected" and changed_fields:
+            listing.edited_after_rejection = True
+
         significant_change = bool(
             changed_fields.intersection(significant_fields)
         )
@@ -226,7 +229,7 @@ def remove_listing(
 ) -> dict[str, Any]:
     """Permanently remove a landlord's listing and its messages."""
 
-    _require_role(actor, "landlord")
+    _require_role(actor, "landlords only", "landlord")
 
     with Session(engine) as session:
         listing_repo = ListingRepository(session)
@@ -251,7 +254,7 @@ def browse_for_students(
     max_price: int | None = None,
     amenity: str | None = None,
 ) -> dict[str, Any]:
-    _require_role(actor, "student")
+    _require_role(actor, "students only", "student")
 
     with Session(engine) as session:
         items = [
@@ -289,13 +292,13 @@ def _list(status: str | None, landlord_id: int | None = None) -> dict[str, Any]:
 
 def list_for_admin(actor: dict[str, Any], *, status: str | None = None) -> dict[str, Any]:
     """Every listing with its status, feedback and deactivation details."""
-    _require_role(actor, "admin")
+    _require_role(actor, "admin only", "admin")
     return _list(status)
 
 
 def list_for_landlord(actor: dict[str, Any], *, status: str | None = None) -> dict[str, Any]:
     """The landlord's own listings with status and admin feedback."""
-    _require_role(actor, "landlord")
+    _require_role(actor, "landlords only", "landlord")
     return _list(status, landlord_id=actor["id"])
 
 
@@ -304,7 +307,7 @@ def send_message(
     listing_id: int,
     body: str,
 ) -> dict[str, Any]:
-    _require_role(actor, "student")
+    _require_role(actor, "students only", "student")
 
     if not body.strip():
         raise InvalidRequest("body required")

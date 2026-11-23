@@ -1,5 +1,5 @@
 from app.states.listing_state import ListingState
-from app.exceptions import InvalidRequest, InvalidTransition
+from app.exceptions import InvalidTransition
 
 
 class VerifiedState(ListingState):
@@ -17,14 +17,11 @@ class VerifiedState(ListingState):
         if action == "deactivate":
             self.require_role(actor_role, {"landlord", "admin"})
 
-            if not reason or not reason.strip():
-                raise InvalidRequest(
-                    "A deactivation reason is required"
-                )
-
             self.listing.status = "inactive"
             self.listing.deactivated_by = actor_role
-            self.listing.deactivation_reason = reason.strip()
+            self.listing.deactivation_reason = (
+                reason.strip() if reason and reason.strip() else None
+            )
             return
 
         if action == "significant_edit":
