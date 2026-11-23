@@ -316,3 +316,20 @@ def test_landlord_cannot_activate_rejected_listing(client, landlord, listing):
     )
 
     assert response.status_code == 409
+
+
+
+def test_submit_transition_cannot_reset_verified_listing(client, landlord, admin):
+    listing = create_test_listing(client, landlord)
+    path = f"/api/listings/{listing['id']}/transition"
+
+    verified = client.post(path, headers=admin, json={"action": "verify"})
+    assert verified.status_code == 200
+    assert verified.json()["listing"]["status"] == "verified"
+
+    denied = client.post(path, headers=landlord, json={"action": "submit"})
+    assert denied.status_code == 400
+
+    activated = client.post(path, headers=landlord, json={"action": "activate"})
+    assert activated.status_code == 200
+    assert activated.json()["listing"]["status"] == "active"
