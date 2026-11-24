@@ -19,6 +19,28 @@ def make_listing(status="pending"):
     )
 
 
+@pytest.mark.parametrize(
+    ("status", "visible"),
+    [
+        ("pending", False),
+        ("provisional", False),
+        ("verified", False),
+        ("active", True),
+        ("inactive", False),
+        ("rejected", False),
+    ],
+)
+def test_student_visibility_is_defined_by_listing_state(status, visible):
+    listing = make_listing(status)
+
+    assert listing.get_state().is_visible_to_students() is visible
+    assert listing.is_visible_to_students() is visible
+
+
+def test_unknown_listing_status_is_not_visible_to_students():
+    assert make_listing("unknown").is_visible_to_students() is False
+
+
 def test_pending_listing_can_be_approved_provisionally():
     listing = make_listing()
 

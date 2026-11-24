@@ -9,6 +9,9 @@ class ListingState(ABC):
     def __init__(self, listing):
         self.listing = listing
 
+    def is_visible_to_students(self) -> bool:
+        return False
+
     @abstractmethod
     def transition(
         self,

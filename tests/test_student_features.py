@@ -9,6 +9,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.database import engine
+from app.models.listing import Listing
 from app.models.message import Message
 from app.models.user import User
 from app.utilities.security import encrypt_password, verify_password
@@ -213,6 +214,24 @@ def test_only_active_listings_are_visible(client, student):
     titles = browse_titles(client, student)
     assert ACTIVE in titles
     assert titles.isdisjoint(HIDDEN)
+
+
+def test_unknown_status_is_hidden_from_browse_and_direct_links(
+    client, student, listing
+):
+    listing_id = listing[ACTIVE]["id"]
+    with Session(engine) as session:
+        row = session.get(Listing, listing_id)
+        assert row is not None
+        row.status = "unknown"
+        session.add(row)
+        session.commit()
+
+    assert ACTIVE not in browse_titles(client, student)
+    response = client.get(
+        f"/api/student/listings/{listing_id}", headers=student
+    )
+    assert response.status_code == 404
 
 
 def test_visible_listings_show_landlord_contact(client, student):

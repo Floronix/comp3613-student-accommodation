@@ -10,7 +10,7 @@
 | D6 | Authorization | No ownership check: any landlord can act on any listing | listings.py `transition` | #12 | ❌ |
 | D7 | Authorization | Admins can activate and resubmit, which should be landlord-only | listings.py `transition` | #12 | ❌ |
 | D8 | Authorization | `X-User-Id` is a plain header, so anyone can impersonate an admin | accommodation.py | Kept for compatibility; documented as a gap in the report | ❌ |
-| D9 | Visibility | `visible_to_students` shows any listing with `flag_active` set, even if the status is not active | lifecycle.py | #13 | ❌ |
+| D9 | Visibility | `visible_to_students` shows any listing with `flag_active` set, even if the status is not active | lifecycle.py, listings.py | #18 | ✅ |
 | D10 | Filters | Amenity filter is a case-sensitive substring match on the raw string | listings.py `browse_for_students` | #13 | ❌ |
 | D11 | Eligibility | Browse accepts a nonblank student ID or provisional incoming flag | listings.py `browse_for_students` | #15 | ✅ |
 | D12 | Geography | `ALLOWED_AREAS` is defined but never enforced on submit | listings.py `submit_listing` | #15 | ❌ |
