@@ -5,7 +5,6 @@ from contextlib import contextmanager
 
 from sqlalchemy.exc import DBAPIError, OperationalError, ProgrammingError
 from sqlmodel import SQLModel, Session, create_engine
-from sqlalchemy import inspect
 
 from app.config import get_settings
 
@@ -38,36 +37,6 @@ def create_db_and_tables() -> None:
     import app.models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
-    update_listing_schema()
-
-
-def update_listing_schema() -> None:
-    """Add missing listing columns without deleting existing records."""
-
-    if not inspect(engine).has_table("listing"):
-        return
-
-    existing_columns = {
-        column["name"]
-        for column in inspect(engine).get_columns("listing")
-    }
-
-    new_columns = {
-        "bedrooms": "INTEGER NOT NULL DEFAULT 0",
-        "bathrooms": "INTEGER NOT NULL DEFAULT 0",
-        "has_kitchen": "BOOLEAN NOT NULL DEFAULT FALSE",
-        "description": "VARCHAR NOT NULL DEFAULT ''",
-        "deactivation_reason": "VARCHAR",
-        "edited_after_rejection": "BOOLEAN NOT NULL DEFAULT FALSE",
-    }
-
-    with engine.begin() as connection:
-        for column_name, column_type in new_columns.items():
-            if column_name not in existing_columns:
-                connection.exec_driver_sql(
-                    f"ALTER TABLE listing ADD COLUMN "
-                    f"{column_name} {column_type}"
-                )
 
 
 def drop_all() -> None:

@@ -15,13 +15,13 @@
 | D11 | Eligibility | Browse accepts a nonblank student ID or provisional incoming flag | listings.py `browse_for_students` | #15 | ✅ |
 | D12 | Geography | `ALLOWED_AREAS` is defined but never enforced on submit | listings.py `submit_listing` | #15 | ❌ |
 | D13 | Validation | Empty amenities are accepted on submit | listings.py `submit_listing` | #15 | ❌ |
-| D14 | Messaging | Students can message pending or rejected (hidden) listings; no eligibility check | listings.py `send_message` | #16 | ❌ |
+| D14 | Messaging | Students can message pending or rejected (hidden) listings; no eligibility check | listings.py `send_message` | #16 | ✅ |
 | D15 | Errors | Transition, submit and message failures all return 400, including unknown listings (no 403, 404 or 409) | accommodation.py | #14 | ✅ |
-| D16 | Missing | No endpoints to edit or remove a listing, report a listing, view one listing, or list a landlord's own listings with feedback | accommodation.py | #14, #16, #17 | ❌ |
+| D16 | Missing | No endpoints to edit or remove a listing, report a listing, view one listing, or list a landlord's own listings with feedback | accommodation.py | #14, #16, #17 | ✅ |
 | D17 | Data | `Listing` has no `deactivated_by` or `feedback` fields | models/listing.py | #11 | ✅ |
 | D18 | Tests | Scenario tests are 3 shallow smoke tests (the other starter tests cover only FastStart auth); no transition, visibility, eligibility or messaging tests | tests/ | #18-#20 | ❌ |
 | D19 | Security | `GET /api/users` was public; the endpoint is now admin-only | routers/users.py | #15 | ✅ |
-| D20 | Messaging | Landlords cannot read or reply to messages; `Message` has no sender or direction field | models/message.py, accommodation.py | #16 | ❌ |
+| D20 | Messaging | Landlords cannot read or reply to messages; `Message` has no sender or direction field | models/message.py, accommodation.py | #16 | ✅ |
 | D21 | Architecture | `listings.py` uses `Session(engine)` directly and bypasses the repository layer | services/listings.py | #11 | ✅ |
 | D22 | Errors | The 401 exception handler renders `401.html` with status 200 for every request, so API 401s (bad login, missing `X-User-Id`) come back as 200 HTML | main.py | #14 | ✅ |
 
