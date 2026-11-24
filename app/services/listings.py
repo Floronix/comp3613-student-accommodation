@@ -1,4 +1,4 @@
-"""Listing CRUD, browse filters, messaging, and lifecycle transitions.
+"""Listing CRUD, browse filters, messaging, reports, and lifecycle transitions.
 
 Failures raise the exceptions in app.exceptions; app.main maps them to
 HTTP status codes (400, 403, 404, 409).
@@ -12,11 +12,12 @@ from typing import Any
 from sqlmodel import Session
 
 from app.database import engine
-from app.exceptions import InvalidRequest, InvalidTransition, NotFound, NotPermitted
+from app.exceptions import InvalidRequest, NotFound, NotPermitted
 from app.models.user import User
 from app.models.listing import Listing
 from app.models.message import Message
-from app.repositories import ListingRepository, MessageRepository
+from app.models.report import Report
+from app.repositories import ListingRepository, MessageRepository, ReportRepository
 from app.services.lifecycle import ACTIONS
 
 ALLOWED_AREAS = {"st_augustine", "mount_hope"}
@@ -234,18 +235,18 @@ def remove_listing(
     actor: dict[str, Any],
     listing_id: int,
 ) -> dict[str, Any]:
-    """Permanently remove a landlord's listing and its messages."""
+    """Permanently remove a landlord's listing and its messages and reports."""
 
     _require_role(actor, "landlords only", "landlord")
 
     with Session(engine) as session:
         listing_repo = ListingRepository(session)
-        message_repo = MessageRepository(session)
 
         listing = _get_listing(listing_repo, listing_id, actor)
 
         try:
-            message_repo.delete_for_listing(listing_id)
+            MessageRepository(session).delete_for_listing(listing_id)
+            ReportRepository(session).delete_for_listing(listing_id)
             listing_repo.delete(listing)
         except Exception:
             session.rollback()
@@ -294,12 +295,19 @@ def get_for_student(actor: dict[str, Any], listing_id: int) -> dict[str, Any]:
     _require_eligible_student(actor)
 
     with Session(engine) as session:
-        listing = ListingRepository(session).get_by_id(listing_id)
-        if listing is None or not listing.is_visible_to_students():
-            raise NotFound("listing not found")
-        item = listing.model_dump()
+        item = _get_visible_listing(ListingRepository(session), listing_id).model_dump()
 
     return {"ok": True, "listing": item}
+
+
+def _get_visible_listing(repo: ListingRepository, listing_id: int) -> Listing:
+    """A listing students may see; hidden ones raise the same 404 as missing ones."""
+    listing = repo.get_by_id(listing_id)
+
+    if listing is None or not listing.is_visible_to_students():
+        raise NotFound("listing not found")
+
+    return listing
 
 
 def _list(status: str | None, landlord_id: int | None = None) -> dict[str, Any]:
@@ -325,27 +333,108 @@ def send_message(
     listing_id: int,
     body: str,
 ) -> dict[str, Any]:
-    _require_role(actor, "students only", "student")
+    """Start or continue the student's thread with a listing's landlord."""
+    _require_eligible_student(actor)
 
     if not body.strip():
         raise InvalidRequest("body required")
 
     with Session(engine) as session:
-        listing = ListingRepository(session).get_by_id(listing_id)
-
-        if listing is None:
-            raise NotFound("listing not found")
-
-        if not listing.is_visible_to_students():
-            raise InvalidTransition("messages are only allowed for active listings")
+        _get_visible_listing(ListingRepository(session), listing_id)
 
         message = MessageRepository(session).create(
             Message(
                 listing_id=listing_id,
                 student_id=actor["id"],
+                sender_role="student",
                 body=body,
                 created_at=_now(),
             )
         )
 
         return {"ok": True, "message_id": message.id}
+
+
+def list_student_messages(
+    actor: dict[str, Any], *, listing_id: int | None = None
+) -> dict[str, Any]:
+    """The student's own threads, including landlord replies."""
+    _require_eligible_student(actor)
+
+    with Session(engine) as session:
+        rows = MessageRepository(session).list_all(listing_id, student_id=actor["id"])
+        return {"ok": True, "messages": [row.model_dump() for row in rows]}
+
+
+def list_listing_messages(actor: dict[str, Any], listing_id: int) -> dict[str, Any]:
+    """Every thread on one of the landlord's own listings."""
+    _require_role(actor, "landlords only", "landlord")
+
+    with Session(engine) as session:
+        _get_listing(ListingRepository(session), listing_id, actor)
+        rows = MessageRepository(session).list_all(listing_id)
+        return {"ok": True, "messages": [row.model_dump() for row in rows]}
+
+
+def reply_to_student(
+    actor: dict[str, Any],
+    listing_id: int,
+    student_id: int,
+    body: str,
+) -> dict[str, Any]:
+    """Landlord reply in a thread the student started on their listing."""
+    _require_role(actor, "landlords only", "landlord")
+
+    if not body.strip():
+        raise InvalidRequest("body required")
+
+    with Session(engine) as session:
+        _get_listing(ListingRepository(session), listing_id, actor)
+        repo = MessageRepository(session)
+
+        if not repo.list_all(listing_id, student_id):
+            raise NotFound("no messages from this student on this listing")
+
+        message = repo.create(
+            Message(
+                listing_id=listing_id,
+                student_id=student_id,
+                sender_role="landlord",
+                body=body,
+                created_at=_now(),
+            )
+        )
+
+        return {"ok": True, "message_id": message.id}
+
+
+def report_listing(
+    actor: dict[str, Any], listing_id: int, reason: str
+) -> dict[str, Any]:
+    """Flag a problem with a visible listing for admins to review."""
+    _require_eligible_student(actor)
+
+    if not reason.strip():
+        raise InvalidRequest("reason required")
+
+    with Session(engine) as session:
+        _get_visible_listing(ListingRepository(session), listing_id)
+
+        report = ReportRepository(session).create(
+            Report(
+                listing_id=listing_id,
+                student_id=actor["id"],
+                reason=reason,
+                created_at=_now(),
+            )
+        )
+
+        return {"ok": True, "report_id": report.id}
+
+
+def list_reports(actor: dict[str, Any]) -> dict[str, Any]:
+    _require_role(actor, "admin only", "admin")
+
+    with Session(engine) as session:
+        rows = ReportRepository(session).list_all()
+        return {"ok": True, "reports": [row.model_dump() for row in rows]}

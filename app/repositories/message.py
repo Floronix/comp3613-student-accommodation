@@ -22,6 +22,19 @@ class MessageRepository:
             self.db.rollback()
             raise
 
+    def list_all(
+        self, listing_id: int | None = None, student_id: int | None = None
+    ) -> list[Message]:
+        stmt = select(Message).order_by(Message.id)
+
+        if listing_id is not None:
+            stmt = stmt.where(Message.listing_id == listing_id)
+
+        if student_id is not None:
+            stmt = stmt.where(Message.student_id == student_id)
+
+        return list(self.db.exec(stmt).all())
+
     def delete_for_listing(self, listing_id: int) -> None:
         """Delete all messages associated with a listing."""
 

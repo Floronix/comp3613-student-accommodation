@@ -71,7 +71,7 @@ def test_missing_or_unknown_user_is_401_json(client, listing, headers):
         ("patch", "/api/landlord/listings/{id}", "landlord", "Verified Unit", {}, 400),
         ("delete", "/api/landlord/listings/{id}", "landlord2", "Verified Unit", None, 403),
         ("delete", "/api/landlord/listings/{id}", "landlord", None, None, 404),
-        ("post", "/api/student/messages", "student", "Pending Unit", "hi", 409),
+        ("post", "/api/student/messages", "student", "Pending Unit", "hi", 404),
         ("post", "/api/student/messages", "student", None, "hi", 404),
         ("post", "/api/student/messages", "landlord", "Verified Active Flat", "hi", 403),
         ("post", "/api/landlord/listings", "student", None, None, 403),

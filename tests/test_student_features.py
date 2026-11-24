@@ -324,9 +324,11 @@ def test_eligible_student_can_message_active_listing(client, request, listing, w
 
 
 @pytest.mark.parametrize("title", HIDDEN)
-def test_cannot_message_hidden_listing(client, student, listing, title):
+def test_hidden_listing_looks_missing_to_messaging(client, student, listing, title):
     listing_id = listing[title]["id"]
-    assert send(client, student, listing_id).status_code in (404, 409)
+    r = send(client, student, listing_id)
+    assert r.status_code == 404
+    assert r.json() == {"detail": "listing not found"}
     assert messages_for(listing_id) == []
 
 
@@ -345,6 +347,142 @@ def test_non_students_cannot_send_student_messages(client, request, listing, who
     assert r.status_code == 403
 
 
-@pytest.mark.xfail(strict=True, reason="D14: messaging has no eligibility check (#16)")
 def test_ineligible_student_cannot_message(client, ineligible, listing):
     assert send(client, ineligible, listing[ACTIVE]["id"]).status_code == 403
+    assert client.get(MESSAGES, headers=ineligible).status_code == 403
+    assert messages_for(listing[ACTIVE]["id"]) == []
+
+
+# --- Landlord replies (D20) ---
+
+
+def thread_url(listing_id):
+    return f"/api/landlord/listings/{listing_id}/messages"
+
+
+def test_landlord_reads_and_replies_and_only_that_student_sees_it(
+    client, student, incoming, landlord, listing
+):
+    listing_id = listing[ACTIVE]["id"]
+    student_id = int(student["X-User-Id"])
+    incoming_id = int(incoming["X-User-Id"])
+    send(client, student, listing_id, "Is it available?")
+    send(client, incoming, listing_id, "Is there parking?")
+
+    r = client.get(thread_url(listing_id), headers=landlord)
+    assert r.status_code == 200
+    assert [(m["student_id"], m["sender_role"], m["body"]) for m in r.json()["messages"]] == [
+        (student_id, "student", "Is it available?"),
+        (incoming_id, "student", "Is there parking?"),
+    ]
+
+    r = client.post(
+        thread_url(listing_id), headers=landlord, json={"student_id": student_id, "body": "Yes"}
+    )
+    assert r.status_code == 200
+
+    mine = client.get(MESSAGES, headers=student).json()["messages"]
+    assert [(m["sender_role"], m["body"]) for m in mine] == [
+        ("student", "Is it available?"),
+        ("landlord", "Yes"),
+    ]
+    theirs = client.get(MESSAGES, headers=incoming, params={"listing_id": listing_id})
+    assert [m["body"] for m in theirs.json()["messages"]] == ["Is there parking?"]
+
+
+def test_landlord_can_only_reply_where_the_student_wrote_first(client, student, landlord, listing):
+    r = client.post(
+        thread_url(listing[ACTIVE]["id"]),
+        headers=landlord,
+        json={"student_id": int(student["X-User-Id"]), "body": "Interested?"},
+    )
+    assert r.status_code == 404
+    assert messages_for(listing[ACTIVE]["id"]) == []
+
+
+@pytest.mark.parametrize(
+    "who, title, code",
+    [
+        ("landlord2", ACTIVE, 403),  # not their listing
+        ("student", ACTIVE, 403),
+        ("admin", ACTIVE, 403),
+        ("landlord", None, 404),
+    ],
+)
+def test_landlord_thread_access_errors(client, request, student, listing, who, title, code):
+    listing_id = listing[title]["id"] if title else 99999
+    send(client, student, listing[ACTIVE]["id"])
+    headers = request.getfixturevalue(who)
+    reply = {"student_id": int(student["X-User-Id"]), "body": "Hi"}
+
+    assert client.get(thread_url(listing_id), headers=headers).status_code == code
+    assert client.post(thread_url(listing_id), headers=headers, json=reply).status_code == code
+
+
+@pytest.mark.parametrize("body", ["", "   "])
+def test_landlord_reply_body_is_required(client, student, landlord, listing, body):
+    listing_id = listing[ACTIVE]["id"]
+    send(client, student, listing_id)
+    r = client.post(
+        thread_url(listing_id),
+        headers=landlord,
+        json={"student_id": int(student["X-User-Id"]), "body": body},
+    )
+    assert r.status_code == 400
+
+
+# --- Reporting a listing (D16) ---
+
+
+def report(client, headers, listing_id, reason="Photos don't match the unit"):
+    return client.post(f"{BROWSE}/{listing_id}/report", headers=headers, json={"reason": reason})
+
+
+def test_student_report_reaches_admin(client, student, admin, listing):
+    listing_id = listing[ACTIVE]["id"]
+
+    r = report(client, student, listing_id)
+
+    assert r.status_code == 200
+    [saved] = client.get("/api/admin/reports", headers=admin).json()["reports"]
+    assert saved["id"] == r.json()["report_id"]
+    assert saved["listing_id"] == listing_id
+    assert saved["student_id"] == int(student["X-User-Id"])
+    assert saved["reason"] == "Photos don't match the unit"
+
+
+def test_removing_listing_removes_only_its_reports(client, student, landlord, admin, listing):
+    kept = make_active(client, landlord, admin, title="Other Flat")
+    report(client, student, listing[ACTIVE]["id"])
+    report(client, student, kept["id"])
+
+    r = client.delete(f"/api/landlord/listings/{listing[ACTIVE]['id']}", headers=landlord)
+    assert r.status_code == 200
+
+    reports = client.get("/api/admin/reports", headers=admin).json()["reports"]
+    assert [row["listing_id"] for row in reports] == [kept["id"]]
+
+
+@pytest.mark.parametrize("title", HIDDEN)
+def test_hidden_listing_looks_missing_to_reports(client, student, admin, listing, title):
+    assert report(client, student, listing[title]["id"]).status_code == 404
+    assert client.get("/api/admin/reports", headers=admin).json()["reports"] == []
+
+
+@pytest.mark.parametrize(
+    "who, reason, code",
+    [
+        ("student", "  ", 400),
+        ("ineligible", "Scam", 403),
+        ("landlord", "Scam", 403),
+        ("admin", "Scam", 403),
+    ],
+)
+def test_report_errors(client, request, listing, who, reason, code):
+    r = report(client, request.getfixturevalue(who), listing[ACTIVE]["id"], reason)
+    assert r.status_code == code
+
+
+@pytest.mark.parametrize("who", ["student", "landlord"])
+def test_only_admins_see_reports(client, request, who):
+    assert client.get("/api/admin/reports", headers=request.getfixturevalue(who)).status_code == 403
