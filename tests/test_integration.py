@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 
 from app.database import engine
 from app.models.message import Message
+from app.models.user import User
 
 from app.config import get_settings
 from app.repositories.user import UserRepository
@@ -504,6 +505,37 @@ def test_minor_edit_keeps_active_listing_active(
     assert response.status_code == 200
     assert response.json()["listing"]["contact_phone"] == "7654321"
     assert response.json()["listing"]["status"] == "active"
+
+def test_provisional_incoming_student_can_browse(client, incoming):
+    response = client.get(
+        "/api/student/listings",
+        headers=incoming,
+    )
+
+    assert response.status_code == 200
+    assert isinstance(response.json()["listings"], list)
+
+
+def test_student_without_id_or_provisional_status_cannot_browse(
+    client, student
+):
+    with Session(engine) as session:
+        registered_student = session.exec(
+            select(User).where(User.email == "student@example.com")
+        ).one()
+        registered_student.student_id = "  \t"
+        registered_student.provisional = 0
+        session.add(registered_student)
+        session.commit()
+
+    response = client.get(
+        "/api/student/listings",
+        headers=student,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "student eligibility required"
+
 
 def test_students_only_see_active_listings(
     client, landlord, student, admin

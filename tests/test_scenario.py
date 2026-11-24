@@ -29,6 +29,7 @@ def test_login_admin():
     assert r.status_code == 200
     assert r.json()["user"]["role"] == "admin"
     assert "password" not in r.json()["user"]
+    assert "password_hash" not in r.json()["user"]
 
 
 def test_student_browse():
