@@ -63,7 +63,10 @@ class Listing(SQLModel, table=True):
         return state_class(self)
 
     def is_visible_to_students(self) -> bool:
-        return self.get_state().is_visible_to_students()
+        try:
+            return self.get_state().is_visible_to_students()
+        except InvalidTransition:
+            return False
 
     def transition(
         self,

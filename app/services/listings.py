@@ -16,7 +16,7 @@ from app.exceptions import InvalidRequest, InvalidTransition, NotFound, NotPermi
 from app.models.listing import Listing
 from app.models.message import Message
 from app.repositories import ListingRepository, MessageRepository
-from app.services.lifecycle import ACTIONS, visible_to_students
+from app.services.lifecycle import ACTIONS
 
 ALLOWED_AREAS = {"st_augustine", "mount_hope"}
 
@@ -260,14 +260,12 @@ def browse_for_students(
         items = [
             row.model_dump()
             for row in ListingRepository(session).list_all()
+            if row.is_visible_to_students()
         ]
 
     results = []
 
     for item in items:
-        if not visible_to_students(item):
-            continue
-
         if area and item["area"] != area:
             continue
 
@@ -290,10 +288,9 @@ def get_for_student(actor: dict[str, Any], listing_id: int) -> dict[str, Any]:
 
     with Session(engine) as session:
         listing = ListingRepository(session).get_by_id(listing_id)
-        item = listing.model_dump() if listing else None
-
-    if item is None or not visible_to_students(item):
-        raise NotFound("listing not found")
+        if listing is None or not listing.is_visible_to_students():
+            raise NotFound("listing not found")
+        item = listing.model_dump()
 
     return {"ok": True, "listing": item}
 
@@ -332,7 +329,7 @@ def send_message(
         if listing is None:
             raise NotFound("listing not found")
 
-        if listing.status != "active":
+        if not listing.is_visible_to_students():
             raise InvalidTransition("messages are only allowed for active listings")
 
         message = MessageRepository(session).create(

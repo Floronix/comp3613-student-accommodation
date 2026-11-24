@@ -150,24 +150,6 @@ def test_deactivate_records_who_did_it(state, role):
     assert listing.deactivated_by == role
 
 
-# ---- Visibility ----------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "state,visible",
-    [
-        ("pending", False),
-        ("provisional", False),
-        ("verified", False),
-        ("active", True),
-        ("inactive", False),
-        ("rejected", False),
-    ],
-)
-def test_only_active_is_visible_to_students(state, visible):
-    assert make_listing(state).is_visible_to_students() is visible
-
-
 def student_titles(client, student):
     response = client.get("/api/student/listings", headers=student)
     assert response.status_code == 200

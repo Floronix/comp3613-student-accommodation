@@ -37,6 +37,10 @@ def test_student_visibility_is_defined_by_listing_state(status, visible):
     assert listing.is_visible_to_students() is visible
 
 
+def test_unknown_listing_status_is_not_visible_to_students():
+    assert make_listing("unknown").is_visible_to_students() is False
+
+
 def test_pending_listing_can_be_approved_provisionally():
     listing = make_listing()
 
