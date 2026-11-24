@@ -4,6 +4,9 @@ from app.exceptions import InvalidTransition
 
 class ActiveState(ListingState):
 
+    def is_visible_to_students(self) -> bool:
+        return True
+
     def transition(self, action, actor_role, feedback=None, reason=None):
 
         if action == "deactivate":
