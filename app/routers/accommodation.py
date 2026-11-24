@@ -66,6 +66,15 @@ class MessageBody(BaseModel):
     body: str
 
 
+class ReplyBody(BaseModel):
+    student_id: int
+    body: str
+
+
+class ReportBody(BaseModel):
+    reason: str
+
+
 Actor = dict[str, Any]
 
 
@@ -157,4 +166,43 @@ def admin_list(
 
 @router.post("/student/messages")
 def message(body: MessageBody, actor: Actor = Depends(current_actor)) -> dict[str, Any]:
+    """Message the landlord of a listing the student can see; 404 if hidden."""
     return listings.send_message(actor, body.listing_id, body.body)
+
+
+@router.get("/student/messages")
+def student_messages(
+    listing_id: int | None = None, actor: Actor = Depends(current_actor)
+) -> dict[str, Any]:
+    """The caller's own threads, including landlord replies."""
+    return listings.list_student_messages(actor, listing_id=listing_id)
+
+
+@router.get("/landlord/listings/{listing_id}/messages")
+def landlord_messages(
+    listing_id: int, actor: Actor = Depends(current_actor)
+) -> dict[str, Any]:
+    """Every student thread on one of the caller's own listings."""
+    return listings.list_listing_messages(actor, listing_id)
+
+
+@router.post("/landlord/listings/{listing_id}/messages")
+def landlord_reply(
+    listing_id: int, body: ReplyBody, actor: Actor = Depends(current_actor)
+) -> dict[str, Any]:
+    """Reply to a student who has already messaged about this listing."""
+    return listings.reply_to_student(actor, listing_id, body.student_id, body.body)
+
+
+@router.post("/student/listings/{listing_id}/report")
+def report(
+    listing_id: int, body: ReportBody, actor: Actor = Depends(current_actor)
+) -> dict[str, Any]:
+    """Report a problem with a listing the student can see; 404 if hidden."""
+    return listings.report_listing(actor, listing_id, body.reason)
+
+
+@router.get("/admin/reports")
+def admin_reports(actor: Actor = Depends(current_actor)) -> dict[str, Any]:
+    """Every student report, oldest first."""
+    return listings.list_reports(actor)
