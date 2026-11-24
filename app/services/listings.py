@@ -35,6 +35,12 @@ def _require_role(actor: dict[str, Any], error: str, *roles: str) -> None:
         raise NotPermitted(error)
 
 
+def _require_eligible_student(actor: dict[str, Any]) -> None:
+    _require_role(actor, "students only", "student")
+    if not User.is_eligible_student(actor):
+        raise NotPermitted("student eligibility required")
+
+
 def _get_listing(repo: ListingRepository, listing_id: int, actor: dict[str, Any]) -> Listing:
     """Fetch a listing, enforcing that landlords only touch their own."""
     listing = repo.get_by_id(listing_id)
@@ -255,10 +261,7 @@ def browse_for_students(
     max_price: int | None = None,
     amenity: str | None = None,
 ) -> dict[str, Any]:
-    _require_role(actor, "students only", "student")
-
-    if not User.is_eligible_student(actor):
-        raise NotPermitted("student eligibility required")
+    _require_eligible_student(actor)
 
     with Session(engine) as session:
         items = [
@@ -288,7 +291,7 @@ def browse_for_students(
 
 def get_for_student(actor: dict[str, Any], listing_id: int) -> dict[str, Any]:
     """One listing by direct link. Hidden listings look the same as missing ones."""
-    _require_role(actor, "students only", "student")
+    _require_eligible_student(actor)
 
     with Session(engine) as session:
         listing = ListingRepository(session).get_by_id(listing_id)

@@ -132,6 +132,17 @@ def test_student_without_id_or_pathway_cannot_browse(client, ineligible):
     assert client.get(BROWSE, headers=ineligible).status_code == 403
 
 
+def test_student_without_id_or_pathway_cannot_open_direct_link(
+    client, ineligible, listing
+):
+    response = client.get(
+        f"{BROWSE}/{listing[ACTIVE]['id']}", headers=ineligible
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "student eligibility required"
+
+
 @pytest.mark.parametrize("who", ["admin", "landlord"])
 def test_non_students_cannot_browse(client, request, who):
     assert client.get(BROWSE, headers=request.getfixturevalue(who)).status_code == 403

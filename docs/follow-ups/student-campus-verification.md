@@ -1,14 +1,21 @@
 # Follow-up draft: Verify student eligibility
 
-**Status:** Draft only; not posted or implemented in Task 15.
+**Status:** Task 13 prototype assumption accepted; live campus verification remains a follow-up.
+
+## Task 13 prototype assumption
+
+- A nonblank `student_id` means campus staff have already confirmed the student's current full-time or part-time status against UWI St. Augustine records outside this app.
+- `provisional=1` means campus staff have manually reviewed and approved the incoming student's acceptance letter or proof of enrolment outside this app.
+- When a student ID is issued, staff record it on the account and clear `provisional`; the ID is then the ongoing eligibility path.
+- The app enforces the recorded eligibility fields but does not connect to campus records or upload/store proof documents. If neither an ID nor approved provisional status is recorded, listing access is denied.
 
 ## Problem
 
-Task 15's browse gate accepts a nonblank student ID or the provisional incoming flag. It does not confirm campus affiliation against campus records or approved proof, so those fields alone are not verification.
+The existing eligibility gate can enforce the recorded decision, but it cannot independently verify campus affiliation or inspect proof. The project currently has no campus-record integration or in-app proof-review workflow.
 
 ## Proposed follow-up
 
-Define and implement a trustworthy verification path using an authoritative campus record or an approved proof-review process. Keep the existing Task 15 gate distinct from this stronger verification until the accepted sources, review owner, and provisional-student policy are agreed.
+For a live deployment, define and implement a trustworthy verification path using an authoritative campus record or approved proof-review process, including its source, reviewer, and secure evidence handling.
 
 ## Acceptance criteria
 

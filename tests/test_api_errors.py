@@ -187,14 +187,24 @@ def test_missing_and_hidden_listings_return_the_same_404(client, student, listin
     assert r.json() == {"detail": "listing not found"}
 
 
-def test_student_can_open_active_listing_by_direct_link(client, student, listing):
+@pytest.mark.parametrize("who", ["student", "incoming"])
+def test_eligible_student_can_open_active_listing_by_direct_link(
+    client, request, listing, who
+):
     active = listing["Verified Active Flat"]
 
-    r = client.get(STUDENT_LISTING.format(active["id"]), headers=student)
+    r = client.get(
+        STUDENT_LISTING.format(active["id"]),
+        headers=request.getfixturevalue(who),
+    )
 
     assert r.status_code == 200
     assert r.json()["listing"]["id"] == active["id"]
+    assert r.json()["listing"]["price"] == active["price"]
+    assert r.json()["listing"]["area"] == active["area"]
+    assert r.json()["listing"]["amenities"] == active["amenities"]
     assert r.json()["listing"]["contact_phone"] == active["contact_phone"]
+    assert r.json()["listing"]["contact_email"] == active["contact_email"]
 
 
 def test_direct_link_stops_working_once_listing_is_deactivated(
