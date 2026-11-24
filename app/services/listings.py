@@ -13,6 +13,7 @@ from sqlmodel import Session
 
 from app.database import engine
 from app.exceptions import InvalidRequest, InvalidTransition, NotFound, NotPermitted
+from app.models.user import User
 from app.models.listing import Listing
 from app.models.message import Message
 from app.repositories import ListingRepository, MessageRepository
@@ -256,10 +257,8 @@ def browse_for_students(
 ) -> dict[str, Any]:
     _require_role(actor, "students only", "student")
 
-    has_student_id = bool(str(student.get("student_id") or "").strip())
-    is_provisional_incoming = bool(student.get("provisional"))
-    if not (has_student_id or is_provisional_incoming):
-        return {"ok": False, "error": "student eligibility required"}
+    if not User.is_eligible_student(actor):
+        raise NotPermitted("student eligibility required")
 
     with Session(engine) as session:
         items = [

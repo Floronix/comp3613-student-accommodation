@@ -96,12 +96,37 @@ def messages_for(listing_id):
 # --- Eligibility (AC 1, D11) ---
 
 
+def test_user_eligibility_predicate_accepts_models_and_public_dicts():
+    model_user = User(
+        username="eligible",
+        email="eligible@example.com",
+        password="unused",
+        role="student",
+        student_id=" 202012345 ",
+    )
+    incoming_public_user = {"role": "student", "student_id": None, "provisional": 1}
+    ineligible_public_user = {
+        "role": "student",
+        "student_id": " \t",
+        "provisional": 0,
+    }
+    landlord_public_user = {
+        "role": "landlord",
+        "student_id": "202012345",
+        "provisional": 0,
+    }
+
+    assert User.is_eligible_student(model_user)
+    assert User.is_eligible_student(incoming_public_user)
+    assert not User.is_eligible_student(ineligible_public_user)
+    assert not User.is_eligible_student(landlord_public_user)
+
+
 @pytest.mark.parametrize("who", ["student", "incoming"])
 def test_registered_and_provisional_students_can_browse(client, request, who):
     assert ACTIVE in browse_titles(client, request.getfixturevalue(who))
 
 
-@pytest.mark.xfail(strict=True, reason="D11: browse never checks student ID or pathway (#15)")
 def test_student_without_id_or_pathway_cannot_browse(client, ineligible):
     assert client.get(BROWSE, headers=ineligible).status_code == 403
 
@@ -143,12 +168,31 @@ def test_passwords_are_stored_hashed(client):
 
 
 def test_user_list_never_exposes_passwords(client):
-    assert "password" not in client.get("/api/users").text
+    login_response = client.post(
+        "/login",
+        data={"username": "admin", "password": "admin-dev"},
+        follow_redirects=False,
+    )
+    assert login_response.status_code == 303
+
+    response = client.get("/api/users")
+    assert response.status_code == 200
+    assert "password" not in response.text
+    assert "password_hash" not in response.text
 
 
-@pytest.mark.xfail(strict=True, reason="D19: GET /api/users needs no authentication (#15)")
 def test_user_list_requires_authentication(client):
-    assert client.get("/api/users").status_code in (401, 403)
+    assert client.get("/api/users").status_code == 401
+
+
+def test_user_list_denies_authenticated_non_admin(client):
+    login_response = client.post(
+        "/login",
+        data={"username": "student", "password": "stud-dev"},
+        follow_redirects=False,
+    )
+    assert login_response.status_code == 303
+    assert client.get("/api/users").status_code == 403
 
 
 # --- Geography (AC 2, D12); off-campus rejection is in test_integration.py ---
